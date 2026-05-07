@@ -1,0 +1,53 @@
+[Setup]
+AppName=Scan Watcher
+AppVersion=1.0.0
+AppVerName=Scan Watcher 1.0.0
+AppPublisher=Nova Network
+AppPublisherURL=https://www.nova-network.de
+AppSupportURL=https://www.nova-network.de
+AppCopyright=Copyright (C) 2026 Nova Network
+DefaultDirName={autopf}\Nova Network\Scan Watcher
+DefaultGroupName=Nova Network\Scan Watcher
+OutputBaseFilename=ScanWatcher_Setup_v1.0.0
+OutputDir=..\dist\installer
+Compression=lzma2/ultra64
+SolidCompression=yes
+WizardStyle=modern
+PrivilegesRequired=admin
+ArchitecturesInstallIn64BitMode=x64compatible
+UninstallDisplayIcon={app}\ScanWatcher.exe
+SetupIconFile=..\assets\icon.ico
+WizardSmallImageFile=..\assets\icon.png
+DisableWelcomePage=no
+DisableProgramGroupPage=yes
+ShowLanguageDialog=no
+CloseApplications=yes
+
+[Languages]
+Name: "german"; MessagesFile: "compiler:Languages\German.isl"
+
+[Messages]
+WelcomeLabel1=Willkommen beim Scan Watcher Setup
+WelcomeLabel2=Scan Watcher wird jetzt auf Ihrem Computer installiert.%n%nScan Watcher erkennt automatisch neue Scandokumente, benennt sie per OCR sinnvoll um und legt sie im gewünschten Ordner ab.%n%nEin Produkt von Nova Network.
+
+[Tasks]
+Name: "desktopicon"; Description: "Desktop-Verknüpfung erstellen"; GroupDescription: "Zusätzliche Symbole:"
+Name: "autostart"; Description: "Scan Watcher automatisch mit Windows starten"; GroupDescription: "Autostart:"; Flags: checkedonce
+
+[Files]
+Source: "..\dist\ScanWatcher\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\assets\icon.ico"; DestDir: "{app}"; Flags: ignoreversion
+
+[Icons]
+Name: "{group}\Scan Watcher"; Filename: "{app}\ScanWatcher.exe"; IconFilename: "{app}\icon.ico"
+Name: "{commondesktop}\Scan Watcher"; Filename: "{app}\ScanWatcher.exe"; IconFilename: "{app}\icon.ico"; Tasks: desktopicon
+Name: "{group}\Deinstallieren"; Filename: "{uninstallexe}"
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "ScanWatcher"; ValueData: """{app}\ScanWatcher.exe"""; Flags: uninsdeletevalue; Tasks: autostart
+
+[UninstallDelete]
+Type: files; Name: "{app}\*.log"
+
+[Run]
+Filename: "{app}\ScanWatcher.exe"; Description: "Scan Watcher jetzt starten"; Flags: nowait postinstall skipifsilent
