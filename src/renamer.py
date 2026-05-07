@@ -70,10 +70,20 @@ def clean(text: str) -> str:
     return text.strip("-")
 
 
-def determine_name(text: str, original_filename: str, anthropic_key: str = "") -> str:
-    """Dateinamen bestimmen – zuerst per API, dann per Regeln."""
+def determine_name(
+    text: str,
+    original_filename: str,
+    anthropic_key: str = "",
+    ollama_enabled: bool = False,
+    ollama_model: str = "llama3.2",
+) -> str:
+    """Dateinamen bestimmen – Reihenfolge: Claude API → Ollama → Regeln."""
     if anthropic_key:
         name = _via_claude(text, original_filename, anthropic_key)
+        if name:
+            return name
+    if ollama_enabled:
+        name = _via_ollama(text, original_filename, ollama_model)
         if name:
             return name
     return _via_rules(text, original_filename)
@@ -105,6 +115,42 @@ OCR-Text:
         return name or None
     except Exception as e:
         log.warning(f"Claude API: {e}")
+        return None
+
+
+def _via_ollama(text: str, original_filename: str, model: str) -> str | None:
+    """Dateinamen per lokalem Ollama-Modell bestimmen (kein Internet noetig)."""
+    import json
+    import urllib.request
+
+    prompt = (
+        "Bestimme fuer dieses gescannte Dokument den Dateinamen.\n"
+        "Schema: DATUM_Absender_Betreff (ohne .pdf)\n"
+        "Regeln: Umlaute ersetzen (ae/oe/ue/ss), Leerzeichen zu Bindestrich, max 120 Zeichen.\n"
+        "Nur den Dateinamen zurueckgeben, kein Erklaerungstext, keine Anfuehrungszeichen.\n\n"
+        "Beispiele:\n"
+        "2026-04-01_inView_Rechnung-RE10154\n"
+        "2026-03-25_Arbeitsgericht-Freiburg_Guetetermin\n"
+        "2026-04-22_KRAVAG_Police-407-Betriebsschutz-Erinnerung\n\n"
+        f"OCR-Text:\n{text[:3000]}"
+    )
+    try:
+        payload = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode("utf-8")
+        req = urllib.request.Request(
+            "http://localhost:11434/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        name = data.get("response", "").strip().replace(".pdf", "").strip('\'"')
+        if name:
+            log.info(f"  Benennung: Ollama ({model})")
+            return name
+        return None
+    except Exception as e:
+        log.warning(f"Ollama: {e}")
         return None
 
 

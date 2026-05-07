@@ -78,6 +78,35 @@ class SettingsDialog(ctk.CTkToplevel):
             wraplength=460,
         ).pack(fill="x", pady=(0, 12))
 
+        # Ollama (lokale KI)
+        ctk.CTkLabel(
+            main,
+            text="Lokale KI – Ollama (optional, kein Internet)",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(4, 4))
+
+        row_oll = ctk.CTkFrame(main, fg_color="#1e1e2e", corner_radius=8)
+        row_oll.pack(fill="x", pady=(0, 4))
+        self._var_ollama = tk.BooleanVar(value=self.cfg.get("ollama_enabled", False))
+        ctk.CTkLabel(row_oll, text="Ollama verwenden (läuft lokal auf Port 11434)", anchor="w").pack(
+            side="left", padx=16, pady=12
+        )
+        ctk.CTkSwitch(
+            row_oll, text="", variable=self._var_ollama, onvalue=True, offvalue=False, width=48
+        ).pack(side="right", padx=16)
+
+        self._text_row(main, "Ollama-Modell (z. B. llama3.2, mistral, gemma3)", "ollama_model")
+
+        ctk.CTkLabel(
+            main,
+            text="  ℹ  Ollama separat installieren: https://ollama.com  •  dann: ollama pull llama3.2",
+            font=ctk.CTkFont(size=10),
+            text_color="#4488cc",
+            anchor="w",
+            wraplength=460,
+        ).pack(fill="x", pady=(0, 12))
+
         # Trennlinie
         ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
 
@@ -177,6 +206,8 @@ class SettingsDialog(ctk.CTkToplevel):
         self.cfg["autostart"] = self._var_autostart.get()
         self.cfg["notifications"] = self._var_notifications.get()
         self.cfg["log_level"] = self._om_log_level.get()
+        self.cfg["ollama_enabled"] = self._var_ollama.get()
+        self.cfg["ollama_model"] = self._var_ollama_model.get().strip() or "llama3.2"
 
         if not self.cfg["source_folder"]:
             messagebox.showerror("Fehler", "Bitte den Eingangsordner angeben.")
@@ -189,7 +220,7 @@ class SettingsDialog(ctk.CTkToplevel):
         self.destroy()
 
     def _center(self):
-        w, h = 520, 640
+        w, h = 520, 780
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
         self.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")

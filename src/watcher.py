@@ -98,7 +98,12 @@ def process_file(path: str, cfg: dict, notify=None) -> bool:
         log.info(f"  Text: {len(text)} Zeichen")
 
         if text:
-            name = renamer.determine_name(text, filename, cfg.get("anthropic_key", ""))
+            name = renamer.determine_name(
+                text, filename,
+                cfg.get("anthropic_key", ""),
+                cfg.get("ollama_enabled", False),
+                cfg.get("ollama_model", "llama3.2"),
+            )
         else:
             name = f"UNLESBAR_{Path(filename).stem}"
             log.warning("  Kein Text lesbar -> UNLESBAR-Prefix")

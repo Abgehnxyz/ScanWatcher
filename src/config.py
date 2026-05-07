@@ -23,6 +23,8 @@ DEFAULT_CONFIG = {
     "autostart": False,
     "notifications": True,
     "log_level": "INFO",
+    "ollama_enabled": False,
+    "ollama_model": "llama3.2",
 }
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", "~")) / "ScanWatcher"
