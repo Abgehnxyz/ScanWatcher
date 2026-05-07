@@ -13,12 +13,13 @@ import sys
 import winreg
 from pathlib import Path
 
+import keyring
+
 
 DEFAULT_CONFIG = {
     "source_folder": "",
     "target_folder": "",
     "tesseract_exe": "tesseract/tesseract.exe",
-    "anthropic_key": "",
     "autostart": False,
     "notifications": True,
     "log_level": "INFO",
@@ -29,22 +30,62 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 _REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 _REG_NAME = "ScanWatcher"
 
+_SERVICE = "ScanWatcher_NovaNetwork"
+_ACCOUNT = "anthropic_api_key"
+
+
+def get_anthropic_key() -> str:
+    """API-Key sicher aus Windows Credential Manager laden."""
+    try:
+        return keyring.get_password(_SERVICE, _ACCOUNT) or ""
+    except Exception:
+        return ""
+
+
+def set_anthropic_key(key: str) -> None:
+    """API-Key sicher im Windows Credential Manager speichern."""
+    try:
+        if key:
+            keyring.set_password(_SERVICE, _ACCOUNT, key)
+        else:
+            try:
+                keyring.delete_password(_SERVICE, _ACCOUNT)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 
 def load() -> dict:
     if CONFIG_FILE.exists():
         try:
             with open(CONFIG_FILE, encoding="utf-8") as f:
                 data = json.load(f)
-            return {**DEFAULT_CONFIG, **data}
+            cfg = {**DEFAULT_CONFIG, **data}
         except Exception:
-            pass
-    return DEFAULT_CONFIG.copy()
+            cfg = DEFAULT_CONFIG.copy()
+    else:
+        cfg = DEFAULT_CONFIG.copy()
+
+    # API-Key: keyring hat Priorität; ggf. aus alter config.json migrieren
+    keyring_key = get_anthropic_key()
+    if keyring_key:
+        cfg["anthropic_key"] = keyring_key
+    elif cfg.get("anthropic_key"):
+        # Einmalige Migration: Key aus JSON in Credential Manager überführen
+        set_anthropic_key(cfg["anthropic_key"])
+    else:
+        cfg["anthropic_key"] = ""
+    return cfg
 
 
 def save(cfg: dict) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    # API-Key sicher speichern – nicht in JSON
+    set_anthropic_key(cfg.get("anthropic_key", ""))
+    to_save = {k: v for k, v in cfg.items() if k != "anthropic_key"}
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2, ensure_ascii=False)
+        json.dump(to_save, f, indent=2, ensure_ascii=False)
     _apply_autostart(cfg.get("autostart", False))
 
 

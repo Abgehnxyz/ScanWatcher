@@ -8,6 +8,7 @@
 
 import ctypes
 import logging
+import logging.handlers
 import sys
 from pathlib import Path
 
@@ -26,7 +27,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-7s  %(message)s",
     handlers=[
-        logging.FileHandler(log_path, encoding="utf-8"),
+        logging.handlers.RotatingFileHandler(
+            log_path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+        ),
         logging.StreamHandler(sys.stdout),
     ],
 )
@@ -35,8 +38,10 @@ log = logging.getLogger("scan_watcher")
 
 def main():
     _ensure_single_instance()
-    log.info("Scan Watcher gestartet (Nova Network)")
     cfg = config.load()
+    _level = getattr(logging, cfg.get("log_level", "INFO"), logging.INFO)
+    logging.getLogger().setLevel(_level)
+    log.info("Scan Watcher gestartet (Nova Network)")
 
     # Beim ersten Start: Einstellungen oeffnen
     if not cfg["source_folder"]:

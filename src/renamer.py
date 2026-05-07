@@ -82,7 +82,7 @@ def determine_name(text: str, original_filename: str, anthropic_key: str = "") -
 def _via_claude(text: str, original_filename: str, api_key: str) -> str | None:
     try:
         import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
+        client = anthropic.Anthropic(api_key=api_key, timeout=30.0)
         prompt = f"""Bestimme fuer dieses gescannte Dokument den Dateinamen.
 Schema: DATUM_Absender_Betreff (ohne .pdf)
 Regeln: Umlaute ersetzen (ae/oe/ue/ss), Leerzeichen zu Bindestrich, max 120 Zeichen.
@@ -96,7 +96,7 @@ Beispiele:
 OCR-Text:
 {text[:3000]}"""
         resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-3-5-haiku-20241022",
             max_tokens=200,
             messages=[{"role": "user", "content": prompt}]
         )

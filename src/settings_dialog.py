@@ -69,6 +69,15 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self._text_row(main, "Claude API-Key (optional)", "anthropic_key", show="*")
 
+        ctk.CTkLabel(
+            main,
+            text="  ⚠  Mit API-Key wird OCR-Text an Anthropic (USA) übermittelt \u2013 nur für eigene, nicht-personenbezogene Dokumente nutzen.",
+            font=ctk.CTkFont(size=10),
+            text_color="#e07020",
+            anchor="w",
+            wraplength=460,
+        ).pack(fill="x", pady=(0, 12))
+
         # Trennlinie
         ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
 
@@ -78,6 +87,8 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self._var_notifications = tk.BooleanVar(value=self.cfg.get("notifications", True))
         self._toggle_row(main, "Windows-Benachrichtigungen anzeigen", self._var_notifications)
+
+        self._option_row(main, "Log-Level (Protokollierung)", "log_level", ["INFO", "DEBUG", "WARNING"])
 
         # Footer mit Buttons
         footer = ctk.CTkFrame(self, fg_color="#0a0a14", corner_radius=0, height=60)
@@ -147,6 +158,17 @@ class SettingsDialog(ctk.CTkToplevel):
             row, text="", variable=var, onvalue=True, offvalue=False, width=48,
         ).pack(side="right", padx=16)
 
+    def _option_row(self, parent: ctk.CTkFrame, label: str, key: str, options: list):
+        ctk.CTkLabel(
+            parent, text=label, anchor="w",
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(fill="x", pady=(8, 4))
+        current = self.cfg.get(key, options[0])
+        om = ctk.CTkOptionMenu(parent, values=options, height=36)
+        om.set(current)
+        om.pack(fill="x", pady=(0, 4))
+        setattr(self, f"_om_{key}", om)
+
     def _save(self):
         for key in ("source_folder", "target_folder", "anthropic_key"):
             var = getattr(self, f"_var_{key}", None)
@@ -154,6 +176,7 @@ class SettingsDialog(ctk.CTkToplevel):
                 self.cfg[key] = var.get().strip()
         self.cfg["autostart"] = self._var_autostart.get()
         self.cfg["notifications"] = self._var_notifications.get()
+        self.cfg["log_level"] = self._om_log_level.get()
 
         if not self.cfg["source_folder"]:
             messagebox.showerror("Fehler", "Bitte den Eingangsordner angeben.")
@@ -166,7 +189,7 @@ class SettingsDialog(ctk.CTkToplevel):
         self.destroy()
 
     def _center(self):
-        w, h = 520, 540
+        w, h = 520, 640
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
         self.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
