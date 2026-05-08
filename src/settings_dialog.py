@@ -112,16 +112,7 @@ class SettingsDialog(ctk.CTkToplevel):
         main = ctk.CTkScrollableFrame(self, fg_color="transparent")
         main.pack(fill="both", expand=True, padx=24, pady=20)
 
-        self._folder_row(main, "Eingangsordner (Pflicht)", "source_folder")
-        self._folder_row(main, "Ausgangsordner (optional)", "target_folder")
-
-        ctk.CTkLabel(
-            main,
-            text="  Leer lassen = Dateien werden im Eingangsordner umbenannt",
-            font=ctk.CTkFont(size=11),
-            text_color="#666",
-            anchor="w",
-        ).pack(fill="x", pady=(0, 12))
+        self._profiles_section(main)
 
         ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=(0, 16))
         self._naming_section(main)
@@ -199,6 +190,96 @@ class SettingsDialog(ctk.CTkToplevel):
             fg_color="transparent", border_width=1, border_color="#444",
             hover_color="#2a2a3a", command=self._export_settings,
         ).pack(side="left", padx=(0, 4), pady=12)
+
+    # --------------------------------------------------------- Ordner-Profile
+
+    def _profiles_section(self, parent: ctk.CTkFrame):
+        ctk.CTkLabel(
+            parent,
+            text="Ordner-Profile",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        ctk.CTkLabel(
+            parent,
+            text="  Jeder Eintrag überwacht einen eigenen Eingangsordner gleichzeitig.",
+            font=ctk.CTkFont(size=10),
+            text_color="#666",
+            anchor="w",
+        ).pack(fill="x", pady=(0, 8))
+
+        self._profile_rows_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self._profile_rows_frame.pack(fill="x")
+
+        self._profile_rows: list[list] = []
+
+        for p in self.cfg.get("folder_profiles", []):
+            self._add_profile_row(p.get("name", ""), p.get("source", ""), p.get("target", ""))
+
+        if not self._profile_rows:
+            self._add_profile_row("Standard", "", "")
+
+        ctk.CTkButton(
+            parent,
+            text="+ Profil hinzufügen",
+            height=32,
+            fg_color="transparent",
+            border_width=1,
+            border_color="#444",
+            hover_color="#2a2a3a",
+            command=lambda: self._add_profile_row("", "", ""),
+        ).pack(anchor="w", pady=(6, 0))
+
+    def _add_profile_row(self, name: str = "", source: str = "", target: str = ""):
+        outer = ctk.CTkFrame(self._profile_rows_frame, fg_color="#1e1e2e", corner_radius=8)
+        outer.pack(fill="x", pady=(0, 6))
+
+        header = ctk.CTkFrame(outer, fg_color="transparent")
+        header.pack(fill="x", padx=8, pady=(6, 2))
+
+        name_var = tk.StringVar(value=name)
+        ctk.CTkEntry(
+            header, textvariable=name_var, height=28,
+            placeholder_text="Profil-Name…",
+        ).pack(side="left", fill="x", expand=True)
+
+        entry: list = [name_var, None, None, outer]
+        self._profile_rows.append(entry)
+
+        ctk.CTkButton(
+            header, text="✕", width=28, height=28,
+            fg_color="transparent", hover_color="#3a2a2a", text_color="#cc4444",
+            command=lambda e=entry: self._remove_profile_row(e),
+        ).pack(side="right", padx=(8, 0))
+
+        def _folder_entry(row_frame, label_text: str, initial: str, placeholder: str) -> tk.StringVar:
+            r = ctk.CTkFrame(row_frame, fg_color="transparent")
+            r.pack(fill="x", padx=8, pady=(2, 2))
+            ctk.CTkLabel(r, text=label_text, width=110, anchor="w",
+                         font=ctk.CTkFont(size=11)).pack(side="left")
+            var = tk.StringVar(value=initial)
+            ctk.CTkEntry(r, textvariable=var, height=30,
+                         placeholder_text=placeholder).pack(
+                side="left", fill="x", expand=True, padx=(4, 4))
+            ctk.CTkButton(
+                r, text="...", width=34, height=30,
+                command=lambda v=var: v.set(filedialog.askdirectory() or v.get()),
+            ).pack(side="right")
+            return var
+
+        src_var = _folder_entry(outer, "Eingangsordner:", source, "Pflicht…")
+        tgt_var = _folder_entry(outer, "Ausgangsordner:", target, "Leer = im Eingangsordner…")
+
+        ctk.CTkFrame(outer, height=4, fg_color="transparent").pack()
+
+        entry[1] = src_var
+        entry[2] = tgt_var
+
+    def _remove_profile_row(self, entry: list):
+        if entry in self._profile_rows:
+            self._profile_rows.remove(entry)
+        entry[3].destroy()
 
     # ------------------------------------------------------------------ Modell
 
@@ -660,10 +741,19 @@ class SettingsDialog(ctk.CTkToplevel):
         setattr(self, f"_om_{key}", om)
 
     def _save(self):
-        for key in ("source_folder", "target_folder"):
-            var = getattr(self, f"_var_{key}", None)
-            if var:
-                self.cfg[key] = var.get().strip()
+        profiles = []
+        for name_var, src_var, tgt_var, _ in getattr(self, "_profile_rows", []):
+            src = src_var.get().strip() if src_var else ""
+            if src:
+                profiles.append({
+                    "name": name_var.get().strip() or "Profil",
+                    "source": src,
+                    "target": tgt_var.get().strip() if tgt_var else "",
+                })
+        self.cfg["folder_profiles"] = profiles
+        # Backward-compat: erstes Profil auch in source_folder schreiben
+        self.cfg["source_folder"] = profiles[0]["source"] if profiles else ""
+        self.cfg["target_folder"] = profiles[0]["target"] if profiles else ""
 
         self.cfg["autostart"]         = self._var_autostart.get()
         self.cfg["notifications"]     = self._var_notifications.get()
@@ -711,8 +801,8 @@ class SettingsDialog(ctk.CTkToplevel):
         ds = self._om_duplicate_strategy.get()
         self.cfg["duplicate_strategy"] = "overwrite" if ds == "Überschreiben" else "suffix"
 
-        if not self.cfg["source_folder"]:
-            messagebox.showerror("Fehler", "Bitte den Eingangsordner angeben.")
+        if not self.cfg.get("folder_profiles"):
+            messagebox.showerror("Fehler", "Bitte mindestens einen Eingangsordner angeben.")
             return
 
         config.save(self.cfg)

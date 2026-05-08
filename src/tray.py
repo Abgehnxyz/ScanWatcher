@@ -43,14 +43,28 @@ class TrayApp:
     def __init__(self, version: str = "0.0.0"):
         self.version = version
         self.cfg = config.load()
-        self.watcher = WatcherService(self.cfg, notify_cb=self._notify)
+        self._watchers: list[WatcherService] = []
         self._icon: pystray.Icon | None = None
         self._heartbeat_timer: threading.Timer | None = None
 
-    def run(self):
-        if self.cfg["source_folder"]:
-            self.watcher.start()
+    def _start_watchers(self):
+        for w in self._watchers:
+            w.stop()
+        self._watchers = []
+        for profile in self.cfg.get("folder_profiles", []):
+            src = profile.get("source", "").strip()
+            if src:
+                profile_cfg = {**self.cfg, "source_folder": src,
+                               "target_folder": profile.get("target", "")}
+                w = WatcherService(profile_cfg, notify_cb=self._notify)
+                self._watchers.append(w)
+                w.start()
 
+    def _any_running(self) -> bool:
+        return any(w.is_running() for w in self._watchers)
+
+    def run(self):
+        self._start_watchers()
         self._heartbeat_check()
 
         menu = pystray.Menu(
@@ -64,7 +78,7 @@ class TrayApp:
 
         self._icon = pystray.Icon(
             name="ScanWatcher",
-            icon=create_icon_image(self.watcher.is_running()),
+            icon=create_icon_image(self._any_running()),
             title="Scan Watcher",
             menu=menu,
         )
@@ -90,20 +104,20 @@ class TrayApp:
 
     def _update_icon(self):
         if self._icon:
-            self._icon.icon = create_icon_image(self.watcher.is_running())
+            self._icon.icon = create_icon_image(self._any_running())
 
     def _show_status(self, icon, item):
-        status = "Aktiv" if self.watcher.is_running() else "Gestoppt"
         count = get_session_count()
-        src = self.cfg.get("source_folder", "(nicht gesetzt)")
-        dst = self.cfg.get("target_folder", "") or "(im Eingangsordner)"
-        self._tk_messagebox(
-            "Scan Watcher – Status",
-            f"Status:              {status}\n"
-            f"Umbenannt (Session): {count} Datei(en)\n\n"
-            f"Eingangsordner: {src}\n"
-            f"Ausgangsordner: {dst}"
-        )
+        running = sum(1 for w in self._watchers if w.is_running())
+        profiles = self.cfg.get("folder_profiles", [])
+        lines = f"Umbenannt (Session): {count} Datei(en)\n"
+        lines += f"Aktive Watcher:      {running} / {len(profiles)}\n"
+        for p in profiles:
+            src = p.get("source", "(nicht gesetzt)")
+            tgt = p.get("target", "") or "(im Eingangsordner)"
+            name = p.get("name", "Profil")
+            lines += f"\n{name}:\n  Quelle: {src}\n  Ziel:   {tgt}"
+        self._tk_messagebox("Scan Watcher – Status", lines)
 
     def _open_settings(self, icon=None, item=None):
         def run_dialog():
@@ -125,8 +139,8 @@ class TrayApp:
 
     def _on_settings_saved(self, new_cfg: dict):
         log.info("Einstellungen gespeichert – Watcher wird neu gestartet.")
-        self.watcher.restart(new_cfg)
         self.cfg = new_cfg
+        self._start_watchers()
         self._update_icon()
 
     def _tk_messagebox(self, title: str, message: str):
@@ -142,5 +156,6 @@ class TrayApp:
     def _quit(self, icon, item):
         if self._heartbeat_timer:
             self._heartbeat_timer.cancel()
-        self.watcher.stop()
+        for w in self._watchers:
+            w.stop()
         icon.stop()

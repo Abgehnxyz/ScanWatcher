@@ -51,7 +51,8 @@ def main():
     telemetry.track_install(APP_VERSION)
 
     # Beim ersten Start: Einstellungen oeffnen
-    if not cfg["source_folder"]:
+    profiles = cfg.get("folder_profiles", [])
+    if not profiles or not profiles[0].get("source"):
         log.info("Kein Eingangsordner konfiguriert – Einstellungen werden geoeffnet.")
         _first_run_setup(cfg)
         return

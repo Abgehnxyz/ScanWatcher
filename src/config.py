@@ -119,6 +119,14 @@ def load() -> dict:
             set_model_key("claude", data["anthropic_key"])
         del data["anthropic_key"]
 
+    # Migration: source_folder/target_folder → folder_profiles
+    if not data.get("folder_profiles") and data.get("source_folder"):
+        data["folder_profiles"] = [{
+            "name": "Standard",
+            "source": data["source_folder"],
+            "target": data.get("target_folder", ""),
+        }]
+
     cfg = {**DEFAULT_CONFIG, **data}
 
     # Alle Model-Keys aus Credential Manager laden
