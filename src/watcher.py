@@ -24,10 +24,18 @@ log = logging.getLogger("scan_watcher.watcher")
 
 _session_count = 0
 _count_lock = threading.Lock()
+_recent_files: list[str] = []
+_recent_lock = threading.Lock()
+_MAX_RECENT = 20
 
 
 def get_session_count() -> int:
     return _session_count
+
+
+def get_recent_files() -> list[str]:
+    with _recent_lock:
+        return list(_recent_files)
 
 
 def is_numeric_file(filename: str, extensions: list | None = None, name_pattern: str = "") -> bool:
@@ -152,6 +160,9 @@ def process_file(path: str, cfg: dict, notify=None) -> bool:
 
         with _count_lock:
             _session_count += 1
+        with _recent_lock:
+            _recent_files.insert(0, os.path.basename(dest))
+            del _recent_files[_MAX_RECENT:]
 
         if notify:
             try:

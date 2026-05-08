@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw
 
 from . import config, telemetry
 from .settings_dialog import SettingsDialog
-from .watcher import WatcherService, get_session_count
+from .watcher import WatcherService, get_session_count, get_recent_files
 
 log = logging.getLogger("scan_watcher.tray")
 
@@ -71,6 +71,11 @@ class TrayApp:
             pystray.MenuItem("Scan Watcher – Nova Network", None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Status", self._show_status),
+            pystray.MenuItem(
+                "Zuletzt verarbeitet",
+                pystray.Menu(lambda: self._recent_menu_items()),
+            ),
+            pystray.MenuItem("Verarbeitete Dateien …", self._show_log_window),
             pystray.MenuItem("Einstellungen", self._open_settings),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Beenden", self._quit),
@@ -142,6 +147,50 @@ class TrayApp:
         self.cfg = new_cfg
         self._start_watchers()
         self._update_icon()
+
+    def _recent_menu_items(self):
+        recent = get_recent_files()[:5]
+        if not recent:
+            return [pystray.MenuItem("(noch keine Dateien)", None, enabled=False)]
+        return [pystray.MenuItem(name, None, enabled=False) for name in recent]
+
+    def _show_log_window(self, icon=None, item=None):
+        def run():
+            import customtkinter as ctk
+            root = ctk.CTk()
+            root.title("Scan Watcher – Verarbeitete Dateien")
+            root.geometry("600x400")
+            root.configure(fg_color="#141420")
+
+            ctk.CTkLabel(
+                root,
+                text="Verarbeitete Dateien (diese Session)",
+                font=ctk.CTkFont(size=13, weight="bold"),
+            ).pack(padx=20, pady=(16, 8))
+
+            box = ctk.CTkScrollableFrame(root, fg_color="#1e1e2e", corner_radius=8)
+            box.pack(fill="both", expand=True, padx=20, pady=(0, 16))
+
+            files = get_recent_files()
+            if files:
+                for i, name in enumerate(files, 1):
+                    ctk.CTkLabel(
+                        box,
+                        text=f"{i:>3}.  {name}",
+                        font=ctk.CTkFont(size=11, family="Courier New"),
+                        text_color="#88ccff",
+                        anchor="w",
+                    ).pack(fill="x", padx=12, pady=2)
+            else:
+                ctk.CTkLabel(
+                    box, text="Noch keine Dateien verarbeitet.",
+                    text_color="#666", anchor="w",
+                ).pack(padx=12, pady=8)
+
+            ctk.CTkButton(root, text="Schließen", width=100, command=root.destroy).pack(pady=(0, 16))
+            root.mainloop()
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _tk_messagebox(self, title: str, message: str):
         def show():

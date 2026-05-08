@@ -46,7 +46,7 @@
 - [x] **Dokumenttypen** editierbar: Eigene Begriffe → Anzeigename
 - [x] **Ordner-Profil** wechseln: mehrere Ordner-Paare (Quelle → Ziel) verwalten
 - [x] Einstellungen Export/Import als `.json`
-- [ ] Verarbeitete Dateien in der App-Oberfläche anzeigen (einfache Log-Liste)
+- [x] Verarbeitete Dateien in der App-Oberfläche anzeigen (einfache Log-Liste)
 
 ### Watcher-Konfiguration
 - [x] **Dateitypen** erweiterbar: neben `.pdf` auch `.jpg`, `.tiff`, `.png` (Bild-OCR)
@@ -58,7 +58,7 @@
 ### UI / UX
 - [ ] **Dark/Light-Mode** Umschalter (customtkinter unterstützt beides)
 - [ ] **Sprache**: Englisch als zweite UI-Sprache (i18n-Vorbereitung)
-- [ ] **System-Tray**: Letzten 5 umbenannten Dateien im Kontextmenü anzeigen
+- [x] **System-Tray**: Letzten 5 umbenannten Dateien im Kontextmenü anzeigen
 - [ ] **Mini-Statusfenster**: optional einblendbares kleines Fenster (immer im Vordergrund)
 - [ ] Update-Check: Beim Start prüfen ob neue Version auf GitHub verfügbar (GitHub Releases API)
 
