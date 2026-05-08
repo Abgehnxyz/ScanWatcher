@@ -65,7 +65,18 @@ def run_renamer():
         print()
 
 
-MODES = {"dialog": run_dialog, "tray": run_tray, "renamer": run_renamer}
+def run_consent():
+    """Telemetrie-Opt-in-Dialog anzeigen (setzt telemetry_asked zurueck)."""
+    from src import config
+    from src.main import _ask_telemetry_consent
+
+    cfg = config.load()
+    cfg["telemetry_asked"] = False  # Reset fuer Testlauf
+    result = _ask_telemetry_consent(cfg)
+    print(f"Ergebnis: telemetry_enabled={result['telemetry_enabled']}")
+
+
+MODES = {"dialog": run_dialog, "tray": run_tray, "renamer": run_renamer, "consent": run_consent}
 
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "dialog"
