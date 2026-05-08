@@ -111,6 +111,7 @@ def process_file(path: str, cfg: dict, notify=None) -> bool:
                 date_format=cfg.get("date_format", "YYYY-MM-DD"),
                 space_replacement=cfg.get("space_replacement", "-"),
                 custom_senders=cfg.get("custom_senders", {}),
+                custom_doc_types=cfg.get("custom_doc_types", {}),
             )
         else:
             name = f"UNLESBAR_{Path(filename).stem}"

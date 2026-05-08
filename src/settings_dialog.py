@@ -130,6 +130,8 @@ class SettingsDialog(ctk.CTkToplevel):
         ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
         self._senders_section(main)
         ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+        self._doc_types_section(main)
+        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
 
         # Toggles
         self._var_autostart = tk.BooleanVar(value=self.cfg.get("autostart", False))
@@ -439,6 +441,74 @@ class SettingsDialog(ctk.CTkToplevel):
             self._sender_rows.remove(entry_tuple)
         entry_tuple[2].destroy()
 
+    # ----------------------------------------------------- Dokumenttypen
+
+    def _doc_types_section(self, parent: ctk.CTkFrame):
+        ctk.CTkLabel(
+            parent,
+            text="Dokumenttypen",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        ctk.CTkLabel(
+            parent,
+            text="  Suchbegriff im OCR-Text → Anzeigename  (Vorrang vor eingebautem Regelwerk)",
+            font=ctk.CTkFont(size=10),
+            text_color="#666",
+            anchor="w",
+        ).pack(fill="x", pady=(0, 8))
+
+        self._doc_type_rows_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self._doc_type_rows_frame.pack(fill="x")
+
+        self._doc_type_rows: list[tuple] = []
+
+        for key, val in self.cfg.get("custom_doc_types", {}).items():
+            self._add_doc_type_row(key, val)
+
+        ctk.CTkButton(
+            parent,
+            text="+ Eintrag hinzufügen",
+            height=32,
+            fg_color="transparent",
+            border_width=1,
+            border_color="#444",
+            hover_color="#2a2a3a",
+            command=lambda: self._add_doc_type_row("", ""),
+        ).pack(anchor="w", pady=(6, 0))
+
+    def _add_doc_type_row(self, key: str = "", value: str = ""):
+        row = ctk.CTkFrame(self._doc_type_rows_frame, fg_color="#1e1e2e", corner_radius=8)
+        row.pack(fill="x", pady=(0, 4))
+
+        kv = tk.StringVar(value=key)
+        vv = tk.StringVar(value=value)
+
+        ctk.CTkEntry(
+            row, textvariable=kv, height=32, placeholder_text="Suchbegriff…"
+        ).pack(side="left", fill="x", expand=True, padx=(8, 4), pady=6)
+
+        ctk.CTkLabel(row, text="→", text_color="#888", width=20).pack(side="left", padx=2)
+
+        ctk.CTkEntry(
+            row, textvariable=vv, height=32, placeholder_text="Anzeigename…"
+        ).pack(side="left", fill="x", expand=True, padx=(4, 4), pady=6)
+
+        entry = (kv, vv, row)
+        self._doc_type_rows.append(entry)
+
+        ctk.CTkButton(
+            row, text="✕", width=32, height=32,
+            fg_color="transparent", hover_color="#3a2a2a", text_color="#cc4444",
+            command=lambda t=entry: self._remove_doc_type_row(t),
+        ).pack(side="right", padx=(0, 6), pady=6)
+
+    def _remove_doc_type_row(self, entry_tuple: tuple):
+        if entry_tuple in self._doc_type_rows:
+            self._doc_type_rows.remove(entry_tuple)
+        entry_tuple[2].destroy()
+
     # --------------------------------------------------------- Hilfs-Methoden
 
     def _folder_row(self, parent: ctk.CTkFrame, label: str, key: str):
@@ -525,6 +595,14 @@ class SettingsDialog(ctk.CTkToplevel):
             if k:
                 custom_senders[k] = v
         self.cfg["custom_senders"] = custom_senders
+
+        custom_doc_types = {}
+        for kv, vv, _ in getattr(self, "_doc_type_rows", []):
+            k = kv.get().strip()
+            v = vv.get().strip()
+            if k:
+                custom_doc_types[k] = v
+        self.cfg["custom_doc_types"] = custom_doc_types
 
         if not self.cfg["source_folder"]:
             messagebox.showerror("Fehler", "Bitte den Eingangsordner angeben.")

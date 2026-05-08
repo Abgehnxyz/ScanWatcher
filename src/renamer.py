@@ -134,6 +134,7 @@ def determine_name(
     date_format: str = "YYYY-MM-DD",
     space_replacement: str = "-",
     custom_senders: dict | None = None,
+    custom_doc_types: dict | None = None,
 ) -> str:
     """Dateinamen bestimmen – aktives KI-Modell, Fallback: Regelwerk."""
     keys = model_keys or {}
@@ -167,7 +168,7 @@ def determine_name(
         log.warning(f"{active_model}: {e}")
     if name:
         return name
-    return _via_rules(text, original_filename, name_template, date_format, space_replacement, custom_senders)
+    return _via_rules(text, original_filename, name_template, date_format, space_replacement, custom_senders, custom_doc_types)
 
 
 def _build_prompt_header(name_template: str, date_format: str, space_replacement: str) -> str:
@@ -343,10 +344,11 @@ def _via_rules(
     date_format: str = "YYYY-MM-DD",
     space_replacement: str = "-",
     custom_senders: dict | None = None,
+    custom_doc_types: dict | None = None,
 ) -> str:
     datum_raw = _extract_date(text, original_filename)
     absender = _extract_sender(text, space_replacement, custom_senders)
-    betreff = _extract_subject(text, space_replacement)
+    betreff = _extract_subject(text, space_replacement, custom_doc_types)
     log.info("  Benennung: Lokale Regeln")
     return apply_template(
         name_template, datum_raw, absender, betreff,
@@ -395,7 +397,7 @@ def _extract_sender(text: str, space_replacement: str = "-", custom_senders: dic
     return "Unbekannt"
 
 
-def _extract_subject(text: str, space_replacement: str = "-") -> str:
+def _extract_subject(text: str, space_replacement: str = "-", custom_doc_types: dict | None = None) -> str:
     patterns = [
         (r"Rechnung(?:snummer)?[:\s#]*([A-Z]{0,3}[\d][\d\-/]{3,20})", "Rechnung-{}"),
         (r"Az\.[:\s]*([^\n\r]{3,30})", "Az-{}"),
@@ -412,6 +414,10 @@ def _extract_subject(text: str, space_replacement: str = "-") -> str:
             return fmt.format(val)
 
     tl = text.lower()
+    # Benutzerdefinierte Dokumenttypen haben Vorrang vor der eingebauten Liste
+    for key, name in (custom_doc_types or {}).items():
+        if key.lower() in tl:
+            return clean(name, space_replacement)
     for key, name in DOKUMENTTYPEN.items():
         if key in tl:
             return name

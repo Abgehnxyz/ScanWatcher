@@ -43,7 +43,7 @@
 
 ### Einstellungs-Dialog verbessern
 - [x] **Absender-Whitelist** editierbar: Eigene Einträge hinzufügen/entfernen (gespeichert in config.json)
-- [ ] **Dokumenttypen** editierbar: Eigene Begriffe → Anzeigename
+- [x] **Dokumenttypen** editierbar: Eigene Begriffe → Anzeigename
 - [ ] **Ordner-Profil** wechseln: mehrere Ordner-Paare (Quelle → Ziel) verwalten
 - [ ] Einstellungen Export/Import als `.json`
 - [ ] Verarbeitete Dateien in der App-Oberfläche anzeigen (einfache Log-Liste)
