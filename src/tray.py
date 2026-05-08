@@ -10,16 +10,19 @@
 import logging
 import threading
 import tkinter as tk
+from datetime import date
 from pathlib import Path
 
 import pystray
 from PIL import Image, ImageDraw
 
-from . import config
+from . import config, telemetry
 from .settings_dialog import SettingsDialog
 from .watcher import WatcherService, get_session_count
 
 log = logging.getLogger("scan_watcher.tray")
+
+_HEARTBEAT_INTERVAL_DAYS = 7
 
 
 def create_icon_image(running: bool = True) -> Image.Image:
@@ -28,7 +31,6 @@ def create_icon_image(running: bool = True) -> Image.Image:
     if icon_path.exists():
         return Image.open(icon_path).resize((64, 64))
 
-    # Fallback: programmatisch generiertes Icon
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     color = "#22c55e" if running else "#ef4444"
@@ -38,14 +40,18 @@ def create_icon_image(running: bool = True) -> Image.Image:
 
 
 class TrayApp:
-    def __init__(self):
+    def __init__(self, version: str = "0.0.0"):
+        self.version = version
         self.cfg = config.load()
         self.watcher = WatcherService(self.cfg, notify_cb=self._notify)
         self._icon: pystray.Icon | None = None
+        self._heartbeat_timer: threading.Timer | None = None
 
     def run(self):
         if self.cfg["source_folder"]:
             self.watcher.start()
+
+        self._heartbeat_check()
 
         menu = pystray.Menu(
             pystray.MenuItem("Scan Watcher – Nova Network", None, enabled=False),
@@ -63,6 +69,24 @@ class TrayApp:
             menu=menu,
         )
         self._icon.run()
+
+    def _heartbeat_check(self):
+        """Sendet Heartbeat wenn 7 Tage seit letztem vergangen. Plant naechsten Check."""
+        try:
+            last_str = self.cfg.get("last_heartbeat", "")
+            last = date.fromisoformat(last_str) if last_str else None
+            if last is None or (date.today() - last).days >= _HEARTBEAT_INTERVAL_DAYS:
+                telemetry.track_heartbeat(self.version, get_session_count())
+                self.cfg["last_heartbeat"] = date.today().isoformat()
+                config.save(self.cfg)
+                log.debug("Heartbeat gesendet.")
+        except Exception as e:
+            log.debug(f"Heartbeat: {e}")
+
+        # Naechsten Check in 24h einplanen (faengt auch lange laufende Instanzen ab)
+        self._heartbeat_timer = threading.Timer(24 * 3600, self._heartbeat_check)
+        self._heartbeat_timer.daemon = True
+        self._heartbeat_timer.start()
 
     def _update_icon(self):
         if self._icon:
@@ -116,5 +140,7 @@ class TrayApp:
         threading.Thread(target=show, daemon=True).start()
 
     def _quit(self, icon, item):
+        if self._heartbeat_timer:
+            self._heartbeat_timer.cancel()
         self.watcher.stop()
         icon.stop()

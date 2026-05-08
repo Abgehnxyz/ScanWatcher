@@ -1,7 +1,7 @@
 """
 @file    config.py
 @project Scan Watcher
-@company Nova Network GmbH
+@company Nova Network
 @date    Mai 2026
 @brief   Konfigurationsverwaltung – laedt und speichert Einstellungen
          unter %%APPDATA%%\ScanWatcher\config.json, verwaltet Autostart-Registry.
@@ -29,6 +29,8 @@ DEFAULT_CONFIG = {
     "date_format": "YYYY-MM-DD",
     "space_replacement": "-",
     "active_model": "rules",
+    "telemetry_asked": False,
+    "last_heartbeat": "",
 }
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", "~")) / "ScanWatcher"

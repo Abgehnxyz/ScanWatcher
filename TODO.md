@@ -26,16 +26,16 @@
 - [x] Modell-Auswahl: Dropdown "Aktives Modell" (keines / Claude / GPT / Gemini / Groq / Ollama)
 
 ### Telemetrie / Usage-Tracking (DSGVO-konform)
-- [ ] **Opt-in** beim ersten Start (explizite Zustimmung, ablösbar in Einstellungen)
-- [ ] Anonyme Installation-ID (UUID, kein Personenbezug)
-- [ ] Gemeldete Ereignisse:
-  - `install` – Version, Windows-Build, Sprache (kein Hostname, kein Username)
-  - `rename` – Erfolg/Misserfolg, genutztes Modell (Claude/Ollama/Regelwerk), Dateianzahl
+- [x] **Opt-in** beim ersten Start (explizite Zustimmung, ablösbar in Einstellungen)
+- [x] Anonyme Installation-ID (UUID, kein Personenbezug)
+- [x] Gemeldete Ereignisse:
+  - `install` – Version, Windows-Build (kein Hostname, kein Username)
+  - `rename` – Erfolg/Misserfolg, genutztes Modell, Dateianzahl
   - `heartbeat` – wöchentlich: aktive Installation, Version
-  - `uninstall` – via Inno Setup Deinstallations-Hook
-- [ ] Endpoint: `https://ops.abgehn.xyz/api/scanwatcher/event` (POST, JSON)
-- [ ] Dashboard in **Abgehn Ops** (abgehn.xyz): Aktive Installationen, Umbenennungen gesamt, Modell-Nutzung, Version-Verteilung
-- [ ] Lokale Opt-out-Möglichkeit: Toggle "Anonyme Nutzungsstatistiken senden" in Einstellungen
+  - `uninstall` – via Inno Setup Deinstallations-Hook *(ausstehend – Installer)*
+- [x] Endpoint: `https://ops.abgehn.xyz/api/scanwatcher/event` (POST, JSON)
+- [ ] Dashboard in **Abgehn Ops** (abgehn.xyz): Aktive Installationen, Umbenennungen gesamt, Modell-Nutzung, Version-Verteilung *(ausstehend – Server)*
+- [x] Lokale Opt-out-Möglichkeit: Toggle "Anonyme Nutzungsstatistiken senden" in Einstellungen
 
 ---
 
