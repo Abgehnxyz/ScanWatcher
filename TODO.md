@@ -2,7 +2,7 @@
 
 > Ziel: Professionelles Freeware-Tool für Windows, das Scan-Ordner überwacht,
 > Dokumente per OCR erkennt und intelligent umbenennt.
-> Veröffentlichung auf GitHub (public), Unterstützung via Patreon.
+> Veröffentlichung auf GitHub (public), Unterstützung via Ko-fi.
 
 ---
 
@@ -32,9 +32,9 @@
   - `install` – Version, Windows-Build (kein Hostname, kein Username)
   - `rename` – Erfolg/Misserfolg, genutztes Modell, Dateianzahl
   - `heartbeat` – wöchentlich: aktive Installation, Version
-  - `uninstall` – via Inno Setup Deinstallations-Hook *(ausstehend – Installer)*
+  - `uninstall` – via Inno Setup Deinstallations-Hook ✓
 - [x] Endpoint: `https://ops.abgehn.xyz/api/scanwatcher/event` (POST, JSON)
-- [ ] Dashboard in **Abgehn Ops** (abgehn.xyz): Aktive Installationen, Umbenennungen gesamt, Modell-Nutzung, Version-Verteilung *(ausstehend – Server-Side)*
+- [x] Dashboard in **Abgehn Ops** (abgehn.xyz): Aktive Installationen, Umbenennungen gesamt, Modell-Nutzung, Version-Verteilung
 - [x] Lokale Opt-out-Möglichkeit: Toggle "Anonyme Nutzungsstatistiken senden" in Einstellungen
 
 ---
@@ -88,8 +88,8 @@
 
 ### Release & Community
 - [x] **GitHub Releases** mit automatisch generiertem Changelog aus Commit-Präfixen
-- [x] **Patreon-Hinweis** im About-Dialog und im Installer-Begrüßungstext
-- [x] **About-Dialog** im Tray-Menü: Version, Lizenz (MIT), Links (GitHub, Patreon, Nova Network)
+- [x] **Ko-fi-Hinweis** im About-Dialog und im Installer-Begrüßungstext
+- [x] **About-Dialog** im Tray-Menü: Version, Lizenz (MIT), Links (GitHub, Ko-fi, Nova Network)
 - [x] **README.md** erweitern: Screenshots, GIF-Demo, Installations-Anleitung, Feature-Matrix
 - [x] GitHub Actions: Automatischer Build + Release bei Tag-Push
 
@@ -111,7 +111,7 @@
 - [x] Unit-Tests für `_via_ollama()` und `_via_claude()` (Mock-HTTP)
 - [x] Unit-Tests für Benennungsschema-Templates (wenn implementiert)
 - [x] `build.bat` auf `py` statt `python` umstellen (Windows-Kompatibilität)
-- [ ] Installer: Tesseract optional mitbündeln oder separaten Download-Link anbieten
+- [x] Installer: Tesseract optional mitbündeln oder separaten Download-Link anbieten
 - [x] `config.json` Schema-Version für Migration bei Breaking Changes
 
 ---
