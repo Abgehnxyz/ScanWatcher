@@ -13,9 +13,9 @@ python -m PyInstaller ^
   --name ScanWatcher ^
   --icon assets\icon.ico ^
   --add-data "assets;assets" ^
-  --add-data "C:\Program Files\Tesseract-OCR\tesseract.exe;tesseract" ^
-  --add-data "C:\Program Files\Tesseract-OCR\tessdata\deu.traineddata;tesseract/tessdata" ^
-  --add-data "C:\Program Files\Tesseract-OCR\tessdata\eng.traineddata;tesseract/tessdata" ^
+  --add-data "D:\Program Files\Tesseract-OCR\tesseract.exe;tesseract" ^
+  --add-data "D:\Program Files\Tesseract-OCR\tessdata\deu.traineddata;tesseract/tessdata" ^
+  --add-data "D:\Program Files\Tesseract-OCR\tessdata\eng.traineddata;tesseract/tessdata" ^
   --collect-data customtkinter ^
   run.py
 
