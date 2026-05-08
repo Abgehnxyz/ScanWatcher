@@ -6,7 +6,7 @@ echo ============================================
 echo.
 
 echo [1/3] PyInstaller – EXE erstellen...
-python -m PyInstaller ^
+py -m PyInstaller ^
   --noconfirm ^
   --onedir ^
   --windowed ^

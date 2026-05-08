@@ -71,6 +71,10 @@ def main():
     if not cfg.get("telemetry_asked", False):
         cfg = _ask_telemetry_consent(cfg)
 
+    import customtkinter as ctk
+    _APPEARANCE = {"dark": "dark", "light": "light", "system": "system"}
+    ctk.set_appearance_mode(_APPEARANCE.get(cfg.get("appearance_mode", "dark"), "dark"))
+
     telemetry.track_install(APP_VERSION)
 
     # Beim ersten Start: Einstellungen oeffnen

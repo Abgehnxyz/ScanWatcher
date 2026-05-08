@@ -135,6 +135,26 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self._option_row(main, "Log-Level (Protokollierung)", "log_level", ["INFO", "DEBUG", "WARNING"])
 
+        ctk.CTkLabel(
+            main,
+            text="Erscheinungsbild",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(8, 4))
+
+        _APPEARANCE_LABELS = {"dark": "Dunkel", "light": "Hell", "system": "System"}
+        _APPEARANCE_KEYS   = {v: k for k, v in _APPEARANCE_LABELS.items()}
+        self._appearance_keys = _APPEARANCE_KEYS
+        current_mode = self.cfg.get("appearance_mode", "dark")
+        self._om_appearance = ctk.CTkOptionMenu(
+            main,
+            values=list(_APPEARANCE_LABELS.values()),
+            height=36,
+            command=lambda v: ctk.set_appearance_mode(_APPEARANCE_KEYS[v]),
+        )
+        self._om_appearance.set(_APPEARANCE_LABELS.get(current_mode, "Dunkel"))
+        self._om_appearance.pack(fill="x", pady=(0, 4))
+
         ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
 
         # Telemetrie
@@ -684,6 +704,15 @@ class SettingsDialog(ctk.CTkToplevel):
         )
         self._om_duplicate_strategy.pack(fill="x")
 
+        # UNLESBAR_-Ordner
+        ctk.CTkFrame(parent, height=6, fg_color="transparent").pack()
+        self._folder_row(parent, "Ordner für unleserliche Dateien (optional)", "unlesbar_folder")
+        ctk.CTkLabel(
+            parent,
+            text="  Leer = UNLESBAR_-Dateien bleiben im Eingangsordner",
+            font=ctk.CTkFont(size=10), text_color="#666", anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
     # --------------------------------------------------------- Hilfs-Methoden
 
     def _folder_row(self, parent: ctk.CTkFrame, label: str, key: str):
@@ -800,6 +829,13 @@ class SettingsDialog(ctk.CTkToplevel):
         self.cfg["stability_timeout"]  = int(self._om_stability_timeout.get())
         ds = self._om_duplicate_strategy.get()
         self.cfg["duplicate_strategy"] = "overwrite" if ds == "Überschreiben" else "suffix"
+        unlesbar_var = getattr(self, "_var_unlesbar_folder", None)
+        self.cfg["unlesbar_folder"] = unlesbar_var.get().strip() if unlesbar_var else ""
+
+        # Erscheinungsbild
+        self.cfg["appearance_mode"] = self._appearance_keys.get(
+            self._om_appearance.get(), "dark"
+        )
 
         if not self.cfg.get("folder_profiles"):
             messagebox.showerror("Fehler", "Bitte mindestens einen Eingangsordner angeben.")

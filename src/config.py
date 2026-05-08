@@ -42,6 +42,14 @@ DEFAULT_CONFIG = {
     "stability_timeout": 30,
     "duplicate_strategy": "suffix",
     "folder_profiles": [],
+    "appearance_mode": "dark",
+    "unlesbar_folder": "",
+    "patreon_reminders": True,
+    "last_patreon_reminder": "",
+    "supporter_token": "",
+    "update_channel": "stable",
+    "update_check_enabled": True,
+    "last_motd_id": "",
 }
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", "~")) / "ScanWatcher"

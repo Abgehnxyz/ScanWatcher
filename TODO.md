@@ -56,10 +56,10 @@
 - [x] Duplikat-Strategie wählbar: `_2`-Suffix / Datum anhängen / überschreiben
 
 ### UI / UX
-- [ ] **Dark/Light-Mode** Umschalter (customtkinter unterstützt beides)
+- [x] **Dark/Light-Mode** Umschalter (customtkinter unterstützt beides)
 - [ ] **Sprache**: Englisch als zweite UI-Sprache (i18n-Vorbereitung)
 - [x] **System-Tray**: Letzten 5 umbenannten Dateien im Kontextmenü anzeigen
-- [ ] **Mini-Statusfenster**: optional einblendbares kleines Fenster (immer im Vordergrund)
+- [x] **Mini-Statusfenster**: optional einblendbares kleines Fenster (immer im Vordergrund)
 - [x] Update-Check: Beim Start prüfen ob neue Version auf GitHub verfügbar (GitHub Releases API)
 
 ### Updater
@@ -104,7 +104,7 @@
 
 ### Sicherheit & Robustheit
 - [x] Watched-Folder Lese-/Schreibrechte beim Start prüfen, Fehler klar melden
-- [ ] `UNLESBAR_`-Dateien separat in eigenem Unterordner ablegen (konfigurierbar)
+- [x] `UNLESBAR_`-Dateien separat in eigenem Unterordner ablegen (konfigurierbar)
 - [x] Crash-Report: Bei unbehandelten Exceptions lokale Datei (crash.log im AppData-Ordner)
 
 ---
@@ -113,7 +113,7 @@
 
 - [x] Unit-Tests für `_via_ollama()` und `_via_claude()` (Mock-HTTP)
 - [x] Unit-Tests für Benennungsschema-Templates (wenn implementiert)
-- [ ] `build.bat` auf `py` statt `python` umstellen (Windows-Kompatibilität)
+- [x] `build.bat` auf `py` statt `python` umstellen (Windows-Kompatibilität)
 - [ ] Installer: Tesseract optional mitbündeln oder separaten Download-Link anbieten
 - [x] `config.json` Schema-Version für Migration bei Breaking Changes
 

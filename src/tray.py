@@ -77,6 +77,7 @@ class TrayApp:
                 pystray.Menu(lambda: self._recent_menu_items()),
             ),
             pystray.MenuItem("Verarbeitete Dateien …", self._show_log_window),
+            pystray.MenuItem("Mini-Status", self._show_mini_status),
             pystray.MenuItem("Einstellungen", self._open_settings),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Über Scan Watcher", self._show_about),
@@ -151,6 +152,51 @@ class TrayApp:
         self.cfg = new_cfg
         self._start_watchers()
         self._update_icon()
+
+    def _show_mini_status(self, icon=None, item=None):
+        def run():
+            import customtkinter as ctk
+            root = ctk.CTk()
+            root.title("Scan Watcher")
+            root.geometry("300x110+20+20")
+            root.attributes("-topmost", True)
+            root.resizable(False, False)
+            root.configure(fg_color="#141420")
+
+            top = ctk.CTkFrame(root, fg_color="transparent")
+            top.pack(fill="x", padx=14, pady=(10, 4))
+
+            dot = ctk.CTkLabel(top, text="●", width=18,
+                               font=ctk.CTkFont(size=14))
+            dot.pack(side="left")
+            status_lbl = ctk.CTkLabel(top, text="",
+                                      font=ctk.CTkFont(size=12, weight="bold"))
+            status_lbl.pack(side="left", padx=(4, 12))
+            count_lbl = ctk.CTkLabel(top, text="",
+                                     font=ctk.CTkFont(size=11), text_color="#888")
+            count_lbl.pack(side="left")
+
+            last_lbl = ctk.CTkLabel(root, text="",
+                                    font=ctk.CTkFont(size=10, family="Courier New"),
+                                    text_color="#4488cc", anchor="w")
+            last_lbl.pack(fill="x", padx=14)
+
+            ctk.CTkButton(root, text="Schließen", height=28,
+                          command=root.destroy).pack(pady=(8, 0))
+
+            def refresh():
+                running = self._any_running()
+                dot.configure(text_color="#22c55e" if running else "#ef4444")
+                status_lbl.configure(text="Aktiv" if running else "Gestoppt")
+                count_lbl.configure(text=f"{get_session_count()} Datei(en)")
+                recent = get_recent_files()
+                last_lbl.configure(text=recent[0] if recent else "–")
+                root.after(2000, refresh)
+
+            refresh()
+            root.mainloop()
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _on_update_available(self, latest_tag: str, release_url: str):
         if self._icon and self.cfg.get("notifications", True):

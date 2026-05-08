@@ -145,8 +145,14 @@ def process_file(path: str, cfg: dict, notify=None) -> bool:
             log.warning("  Kein Text lesbar -> UNLESBAR-Prefix")
 
         strategy = cfg.get("duplicate_strategy", "suffix")
+        unlesbar_dir = cfg.get("unlesbar_folder", "").strip()
         target_folder = cfg.get("target_folder", "").strip()
-        if target_folder:
+
+        if name.startswith("UNLESBAR_") and unlesbar_dir:
+            os.makedirs(unlesbar_dir, exist_ok=True)
+            dest = renamer.unique_path(unlesbar_dir, name + original_ext, strategy)
+            shutil.move(path, dest)
+        elif target_folder:
             dest = renamer.unique_path(target_folder, name + original_ext, strategy)
             shutil.move(path, dest)
         else:
