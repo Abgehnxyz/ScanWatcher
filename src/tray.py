@@ -328,13 +328,13 @@ class TrayApp:
             f"Nova Network GmbH\n\n"
             f"Lizenz: MIT\n"
             f"GitHub: github.com/Abgehnxyz/ScanWatcher\n"
-            f"Patreon: patreon.com/NovaNetwork\n\n"
+            f"Patreon: patreon.com/NovaNetworkone\n\n"
             f"Danke für deine Unterstützung!"
         )
 
     def _open_patreon(self, icon=None, item=None):
         import webbrowser
-        webbrowser.open("https://patreon.com/NovaNetwork")
+        webbrowser.open("https://patreon.com/NovaNetworkone")
 
     def _recent_menu_items(self):
         recent = get_recent_files()[:5]
