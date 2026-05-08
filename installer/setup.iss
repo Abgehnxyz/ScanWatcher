@@ -35,7 +35,7 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 
 [Messages]
 WelcomeLabel1=Willkommen beim Scan Watcher Setup
-WelcomeLabel2=Scan Watcher wird jetzt auf Ihrem Computer installiert.%n%nScan Watcher erkennt automatisch neue Scandokumente, benennt sie per OCR sinnvoll um und legt sie im gewünschten Ordner ab.%n%nEin Produkt von Nova Network.
+WelcomeLabel2=Scan Watcher wird jetzt auf Ihrem Computer installiert.%n%nScan Watcher erkennt automatisch neue Scandokumente, benennt sie per OCR sinnvoll um und legt sie im gewünschten Ordner ab.%n%nScan Watcher ist kostenlos. Wenn Ihnen das Tool hilft, freuen wir uns über Ihre Unterstützung auf Patreon: patreon.com/NovaNetworkone%n%nEin Produkt von Nova Network.
 
 [Tasks]
 Name: "desktopicon"; Description: "Desktop-Verknüpfung erstellen"; GroupDescription: "Zusätzliche Symbole:"

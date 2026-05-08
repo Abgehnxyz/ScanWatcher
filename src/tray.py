@@ -322,15 +322,65 @@ class TrayApp:
         config.save(self.cfg)
 
     def _show_about(self, icon=None, item=None):
-        self._tk_messagebox(
-            "Über Scan Watcher",
-            f"Scan Watcher  v{self.version}\n"
-            f"Nova Network GmbH\n\n"
-            f"Lizenz: MIT\n"
-            f"GitHub: github.com/Abgehnxyz/ScanWatcher\n"
-            f"Patreon: patreon.com/NovaNetworkone\n\n"
-            f"Danke für deine Unterstützung!"
-        )
+        def run():
+            import customtkinter as ctk
+            import webbrowser
+            root = ctk.CTk()
+            root.title("Über Scan Watcher")
+            root.geometry("380x300")
+            root.resizable(False, False)
+            root.configure(fg_color="#141420")
+            root.attributes("-topmost", True)
+
+            icon_path = Path(__file__).parent.parent / "assets" / "icon.png"
+            if icon_path.exists():
+                try:
+                    from PIL import ImageTk
+                    img = ImageTk.PhotoImage(
+                        file=str(icon_path), master=root
+                    )
+                    ctk.CTkLabel(root, image=img, text="").pack(pady=(18, 4))
+                    root._img_ref = img
+                except Exception:
+                    pass
+
+            ctk.CTkLabel(
+                root, text=f"Scan Watcher  v{self.version}",
+                font=ctk.CTkFont(size=16, weight="bold"),
+            ).pack(pady=(4, 2))
+            ctk.CTkLabel(
+                root, text="Nova Network  |  Lizenz: MIT",
+                font=ctk.CTkFont(size=11), text_color="#888",
+            ).pack()
+
+            sep = ctk.CTkFrame(root, height=1, fg_color="#2a2a3a")
+            sep.pack(fill="x", padx=24, pady=12)
+
+            btn_row = ctk.CTkFrame(root, fg_color="transparent")
+            btn_row.pack(padx=24, pady=(0, 8))
+
+            ctk.CTkButton(
+                btn_row, text="GitHub", width=110, height=32,
+                fg_color="transparent", border_width=1, border_color="#444",
+                command=lambda: webbrowser.open(
+                    "https://github.com/Abgehnxyz/ScanWatcher"),
+            ).pack(side="left", padx=(0, 8))
+
+            ctk.CTkButton(
+                btn_row, text="❤ Patreon", width=120, height=32,
+                fg_color="#e85d26", hover_color="#c94d1e",
+                command=lambda: webbrowser.open(
+                    "https://patreon.com/NovaNetworkone"),
+            ).pack(side="left")
+
+            ctk.CTkButton(
+                root, text="Schließen", width=100, height=32,
+                command=root.destroy,
+            ).pack(pady=(4, 16))
+
+            root.mainloop()
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _open_patreon(self, icon=None, item=None):
         import webbrowser
