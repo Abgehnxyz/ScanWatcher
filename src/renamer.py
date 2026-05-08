@@ -1,7 +1,7 @@
 """
 @file    renamer.py
 @project Scan Watcher
-@company Nova Network GmbH
+@company Nova Network
 @date    Mai 2026
 @brief   Dateinamen-Bestimmung aus extrahiertem OCR-Text.
          Stufe 1: Claude API (optional, erfordert API-Key).
@@ -133,6 +133,7 @@ def determine_name(
     name_template: str = "{DATUM}_{ABSENDER}_{BETREFF}",
     date_format: str = "YYYY-MM-DD",
     space_replacement: str = "-",
+    custom_senders: dict | None = None,
 ) -> str:
     """Dateinamen bestimmen – aktives KI-Modell, Fallback: Regelwerk."""
     keys = model_keys or {}
@@ -166,7 +167,7 @@ def determine_name(
         log.warning(f"{active_model}: {e}")
     if name:
         return name
-    return _via_rules(text, original_filename, name_template, date_format, space_replacement)
+    return _via_rules(text, original_filename, name_template, date_format, space_replacement, custom_senders)
 
 
 def _build_prompt_header(name_template: str, date_format: str, space_replacement: str) -> str:
@@ -341,9 +342,10 @@ def _via_rules(
     name_template: str = "{DATUM}_{ABSENDER}_{BETREFF}",
     date_format: str = "YYYY-MM-DD",
     space_replacement: str = "-",
+    custom_senders: dict | None = None,
 ) -> str:
     datum_raw = _extract_date(text, original_filename)
-    absender = _extract_sender(text, space_replacement)
+    absender = _extract_sender(text, space_replacement, custom_senders)
     betreff = _extract_subject(text, space_replacement)
     log.info("  Benennung: Lokale Regeln")
     return apply_template(
@@ -377,8 +379,12 @@ def _extract_date(text: str, original_filename: str) -> str:
     return datetime.now().strftime("%Y-%m")
 
 
-def _extract_sender(text: str, space_replacement: str = "-") -> str:
+def _extract_sender(text: str, space_replacement: str = "-", custom_senders: dict | None = None) -> str:
     tl = text.lower()
+    # Benutzerdefinierte Absender haben Vorrang vor der eingebauten Liste
+    for key, name in (custom_senders or {}).items():
+        if key.lower() in tl:
+            return clean(name, space_replacement)
     for key, name in BEKANNTE_ABSENDER.items():
         if key in tl:
             return clean(name, space_replacement)

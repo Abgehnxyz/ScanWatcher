@@ -1,7 +1,7 @@
 """
 @file    watcher.py
 @project Scan Watcher
-@company Nova Network GmbH
+@company Nova Network
 @date    Mai 2026
 @brief   Dateiueberwachung mit watchdog – erkennt neue numerisch benannte PDFs,
          wartet auf stabile Dateigroesse und startet die Verarbeitungs-Pipeline.
@@ -110,6 +110,7 @@ def process_file(path: str, cfg: dict, notify=None) -> bool:
                 name_template=cfg.get("name_template", "{DATUM}_{ABSENDER}_{BETREFF}"),
                 date_format=cfg.get("date_format", "YYYY-MM-DD"),
                 space_replacement=cfg.get("space_replacement", "-"),
+                custom_senders=cfg.get("custom_senders", {}),
             )
         else:
             name = f"UNLESBAR_{Path(filename).stem}"

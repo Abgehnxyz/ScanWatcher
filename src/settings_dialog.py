@@ -1,7 +1,7 @@
 """
 @file    settings_dialog.py
 @project Scan Watcher
-@company Nova Network GmbH
+@company Nova Network
 @date    Mai 2026
 @brief   Einstellungs-Dialog (customtkinter, Dark-Mode) – Ordnerkonfiguration,
          KI-Modell-Auswahl, Benennungsschema, Autostart- und Benachrichtigungs-Toggles.
@@ -127,6 +127,8 @@ class SettingsDialog(ctk.CTkToplevel):
         self._naming_section(main)
         ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
         self._model_section(main)
+        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+        self._senders_section(main)
         ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
 
         # Toggles
@@ -369,6 +371,74 @@ class SettingsDialog(ctk.CTkToplevel):
         except Exception:
             self._preview_label.configure(text="—")
 
+    # ------------------------------------------------------- Absender-Whitelist
+
+    def _senders_section(self, parent: ctk.CTkFrame):
+        ctk.CTkLabel(
+            parent,
+            text="Absender-Whitelist",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        ctk.CTkLabel(
+            parent,
+            text="  Suchbegriff im OCR-Text → Anzeigename  (Vorrang vor eingebautem Regelwerk)",
+            font=ctk.CTkFont(size=10),
+            text_color="#666",
+            anchor="w",
+        ).pack(fill="x", pady=(0, 8))
+
+        self._sender_rows_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self._sender_rows_frame.pack(fill="x")
+
+        self._sender_rows: list[tuple] = []
+
+        for key, val in self.cfg.get("custom_senders", {}).items():
+            self._add_sender_row(key, val)
+
+        ctk.CTkButton(
+            parent,
+            text="+ Eintrag hinzufügen",
+            height=32,
+            fg_color="transparent",
+            border_width=1,
+            border_color="#444",
+            hover_color="#2a2a3a",
+            command=lambda: self._add_sender_row("", ""),
+        ).pack(anchor="w", pady=(6, 0))
+
+    def _add_sender_row(self, key: str = "", value: str = ""):
+        row = ctk.CTkFrame(self._sender_rows_frame, fg_color="#1e1e2e", corner_radius=8)
+        row.pack(fill="x", pady=(0, 4))
+
+        kv = tk.StringVar(value=key)
+        vv = tk.StringVar(value=value)
+
+        ctk.CTkEntry(
+            row, textvariable=kv, height=32, placeholder_text="Suchbegriff…"
+        ).pack(side="left", fill="x", expand=True, padx=(8, 4), pady=6)
+
+        ctk.CTkLabel(row, text="→", text_color="#888", width=20).pack(side="left", padx=2)
+
+        ctk.CTkEntry(
+            row, textvariable=vv, height=32, placeholder_text="Anzeigename…"
+        ).pack(side="left", fill="x", expand=True, padx=(4, 4), pady=6)
+
+        entry = (kv, vv, row)
+        self._sender_rows.append(entry)
+
+        ctk.CTkButton(
+            row, text="✕", width=32, height=32,
+            fg_color="transparent", hover_color="#3a2a2a", text_color="#cc4444",
+            command=lambda t=entry: self._remove_sender_row(t),
+        ).pack(side="right", padx=(0, 6), pady=6)
+
+    def _remove_sender_row(self, entry_tuple: tuple):
+        if entry_tuple in self._sender_rows:
+            self._sender_rows.remove(entry_tuple)
+        entry_tuple[2].destroy()
+
     # --------------------------------------------------------- Hilfs-Methoden
 
     def _folder_row(self, parent: ctk.CTkFrame, label: str, key: str):
@@ -447,6 +517,14 @@ class SettingsDialog(ctk.CTkToplevel):
             config.set_model_key(m, key)
         ollama_var = getattr(self, "_var_ollama_model", None)
         self.cfg["ollama_model"] = ollama_var.get().strip() if ollama_var else self.cfg.get("ollama_model", "llama3.2")
+
+        custom_senders = {}
+        for kv, vv, _ in getattr(self, "_sender_rows", []):
+            k = kv.get().strip()
+            v = vv.get().strip()
+            if k:
+                custom_senders[k] = v
+        self.cfg["custom_senders"] = custom_senders
 
         if not self.cfg["source_folder"]:
             messagebox.showerror("Fehler", "Bitte den Eingangsordner angeben.")

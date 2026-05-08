@@ -42,7 +42,7 @@
 ## 🟡 Mittlere Priorität
 
 ### Einstellungs-Dialog verbessern
-- [ ] **Absender-Whitelist** editierbar: Eigene Einträge hinzufügen/entfernen (gespeichert in config.json)
+- [x] **Absender-Whitelist** editierbar: Eigene Einträge hinzufügen/entfernen (gespeichert in config.json)
 - [ ] **Dokumenttypen** editierbar: Eigene Begriffe → Anzeigename
 - [ ] **Ordner-Profil** wechseln: mehrere Ordner-Paare (Quelle → Ziel) verwalten
 - [ ] Einstellungen Export/Import als `.json`

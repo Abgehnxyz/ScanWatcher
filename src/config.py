@@ -31,6 +31,7 @@ DEFAULT_CONFIG = {
     "active_model": "rules",
     "telemetry_asked": False,
     "last_heartbeat": "",
+    "custom_senders": {},
 }
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", "~")) / "ScanWatcher"
