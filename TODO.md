@@ -63,16 +63,16 @@
 - [x] Update-Check: Beim Start prüfen ob neue Version auf GitHub verfügbar (GitHub Releases API)
 
 ### Updater
-- [ ] Beim Start via GitHub Releases API prüfen ob neue Version verfügbar (`GET /repos/…/releases/latest`)
-- [ ] Bei verfügbarem Update: Tray-Benachrichtigung + optionaler Hinweis-Banner in der App
-- [ ] **In-App-Updater**: EXE/Installer-Download im Hintergrund, dann Neustart mit neuem Installer
+- [x] Beim Start via GitHub Releases API prüfen ob neue Version verfügbar (`GET /repos/…/releases/latest`)
+- [x] Bei verfügbarem Update: Tray-Benachrichtigung + optionaler Hinweis-Banner in der App
+- [x] **In-App-Updater**: EXE/Installer-Download im Hintergrund, dann Neustart mit neuem Installer
   - Installer-URL aus GitHub Release-Asset automatisch ermitteln
-  - Download-Fortschritt anzeigen (Tray-Tooltip oder kleines Progressfenster)
+  - Download-Fortschritt anzeigen (Progressbalken im Update-Dialog)
   - Vor Installation: Hash-Prüfung (SHA256 aus Release-Assets)
-- [ ] Update-Kanal wählbar: `stable` (default) / `beta` (GitHub Pre-Releases)
-- [ ] Update-Check deaktivierbar in Einstellungen (Toggle „Automatisch auf Updates prüfen")
-- [ ] Changelog der neuen Version im Benachrichtigungs-Dialog anzeigen (aus GitHub Release-Body)
-- [ ] Server-seitiger „Message of the Day"-Endpoint (ops.abgehn.xyz): einmalige Meldungen schieben
+- [x] Update-Kanal wählbar: `stable` (default) / `beta` (GitHub Pre-Releases)
+- [x] Update-Check deaktivierbar in Einstellungen (Toggle „Automatisch auf Updates prüfen")
+- [x] Changelog der neuen Version im Benachrichtigungs-Dialog anzeigen (aus GitHub Release-Body)
+- [x] Server-seitiger „Message of the Day"-Endpoint (ops.abgehn.xyz): einmalige Meldungen schieben
   - Technischer Hinweis, kritischer Bugfix-Alert, neue Feature-Ankündigung
   - Nachricht nur einmalig zeigen (gespeicherte `last_motd_id` in config)
 

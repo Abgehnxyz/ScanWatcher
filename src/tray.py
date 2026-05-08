@@ -66,7 +66,16 @@ class TrayApp:
     def run(self):
         self._start_watchers()
         self._heartbeat_check()
-        updater.check_async(self.version, self._on_update_available)
+        updater.check_async(
+            self.version,
+            self.cfg.get("update_channel", "stable"),
+            self._on_update_available,
+            enabled=self.cfg.get("update_check_enabled", True),
+        )
+        updater.check_motd_async(
+            self.cfg.get("last_motd_id", ""),
+            self._on_motd,
+        )
 
         menu = pystray.Menu(
             pystray.MenuItem("Scan Watcher – Nova Network", None, enabled=False),
@@ -198,16 +207,98 @@ class TrayApp:
 
         threading.Thread(target=run, daemon=True).start()
 
-    def _on_update_available(self, latest_tag: str, release_url: str):
+    def _on_update_available(self, release: dict):
+        tag = release.get("tag_name", "?")
         if self._icon and self.cfg.get("notifications", True):
             try:
                 self._icon.notify(
-                    f"Version {latest_tag} verfügbar – Jetzt herunterladen!",
+                    f"Version {tag} verfügbar – Klicke für Details.",
                     "Scan Watcher – Update",
                 )
             except Exception:
                 pass
-        log.info(f"Update-Benachrichtigung: {latest_tag}  {release_url}")
+        threading.Thread(
+            target=self._show_update_dialog, args=(release,), daemon=True,
+        ).start()
+
+    def _show_update_dialog(self, release: dict):
+        import customtkinter as ctk
+        tag = release.get("tag_name", "?")
+        changelog = release.get("body", "(Kein Changelog verfügbar)")
+        html_url  = release.get("html_url", updater._RELEASES_URL)
+
+        root = ctk.CTk()
+        root.title(f"Update verfügbar – {tag}")
+        root.geometry("500x420")
+        root.configure(fg_color="#141420")
+        root.attributes("-topmost", True)
+
+        ctk.CTkLabel(root, text=f"Neue Version {tag} verfügbar!",
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(padx=20, pady=(16, 4))
+
+        ctk.CTkLabel(root, text="Änderungen:", font=ctk.CTkFont(size=11),
+                     anchor="w").pack(fill="x", padx=20)
+        box = ctk.CTkScrollableFrame(root, fg_color="#1e1e2e", corner_radius=8, height=180)
+        box.pack(fill="x", padx=20, pady=(4, 12))
+        ctk.CTkLabel(box, text=changelog, font=ctk.CTkFont(size=10),
+                     text_color="#ccc", anchor="w", justify="left",
+                     wraplength=440).pack(padx=8, pady=8, fill="x")
+
+        progress_var = ctk.StringVar(value="")
+        progress_lbl = ctk.CTkLabel(root, textvariable=progress_var,
+                                    font=ctk.CTkFont(size=10), text_color="#888")
+        progress_lbl.pack(padx=20)
+
+        bar = ctk.CTkProgressBar(root, width=460)
+        bar.set(0)
+        bar.pack(padx=20, pady=(4, 8))
+
+        btn_row = ctk.CTkFrame(root, fg_color="transparent")
+        btn_row.pack(padx=20, pady=(0, 16), fill="x")
+
+        def on_install():
+            install_btn.configure(state="disabled", text="Lade herunter…")
+
+            def on_progress(done, total):
+                if total:
+                    bar.set(done / total)
+                    progress_var.set(f"{done // 1024} / {total // 1024} KB")
+                else:
+                    progress_var.set(f"{done // 1024} KB")
+
+            def on_done(path, error):
+                if error:
+                    progress_var.set(f"Fehler: {error}")
+                    install_btn.configure(state="normal", text="Nochmal versuchen")
+                    return
+                progress_var.set("Download abgeschlossen – Installer wird gestartet…")
+                root.after(800, lambda: updater.run_installer_and_quit(path))
+
+            updater.download_installer(release, on_progress, on_done)
+
+        install_btn = ctk.CTkButton(btn_row, text="Jetzt installieren",
+                                    width=160, height=36, command=on_install)
+        install_btn.pack(side="left")
+
+        ctk.CTkButton(btn_row, text="Zur Download-Seite", width=150, height=36,
+                      fg_color="transparent", border_width=1, border_color="#444",
+                      command=lambda: __import__("webbrowser").open(html_url),
+                      ).pack(side="left", padx=(8, 0))
+
+        ctk.CTkButton(btn_row, text="Später", width=80, height=36,
+                      fg_color="transparent", command=root.destroy,
+                      ).pack(side="right")
+
+        root.mainloop()
+
+    def _on_motd(self, motd_id: str, message: str):
+        if self._icon and self.cfg.get("notifications", True):
+            try:
+                self._icon.notify(message, "Scan Watcher")
+            except Exception:
+                pass
+        self.cfg["last_motd_id"] = motd_id
+        config.save(self.cfg)
 
     def _show_about(self, icon=None, item=None):
         self._tk_messagebox(

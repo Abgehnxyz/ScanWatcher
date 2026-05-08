@@ -165,6 +165,32 @@ class SettingsDialog(ctk.CTkToplevel):
             anchor="w",
         ).pack(fill="x", pady=(0, 4))
 
+        # Update-Einstellungen
+        ctk.CTkLabel(
+            main,
+            text="Updates",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        self._var_update_check = tk.BooleanVar(value=self.cfg.get("update_check_enabled", True))
+        self._toggle_row(main, "Automatisch auf Updates prüfen", self._var_update_check)
+
+        row_ch = ctk.CTkFrame(main, fg_color="transparent")
+        row_ch.pack(fill="x", pady=(4, 0))
+        ctk.CTkLabel(row_ch, text="Update-Kanal", font=ctk.CTkFont(size=11),
+                     anchor="w").pack(side="left")
+        self._om_update_channel = ctk.CTkOptionMenu(
+            row_ch, values=["Stabil (stable)", "Beta (pre-release)"], width=180, height=32,
+        )
+        self._om_update_channel.set(
+            "Beta (pre-release)" if self.cfg.get("update_channel") == "beta"
+            else "Stabil (stable)"
+        )
+        self._om_update_channel.pack(side="right")
+
+        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+
         self._var_telemetry = tk.BooleanVar(value=self.cfg.get("telemetry_enabled", False))
         row_tel = ctk.CTkFrame(main, fg_color="#1e1e2e", corner_radius=8)
         row_tel.pack(fill="x", pady=(0, 4))
@@ -784,10 +810,14 @@ class SettingsDialog(ctk.CTkToplevel):
         self.cfg["source_folder"] = profiles[0]["source"] if profiles else ""
         self.cfg["target_folder"] = profiles[0]["target"] if profiles else ""
 
-        self.cfg["autostart"]         = self._var_autostart.get()
-        self.cfg["notifications"]     = self._var_notifications.get()
-        self.cfg["log_level"]         = self._om_log_level.get()
-        self.cfg["telemetry_enabled"] = self._var_telemetry.get()
+        self.cfg["autostart"]            = self._var_autostart.get()
+        self.cfg["notifications"]        = self._var_notifications.get()
+        self.cfg["log_level"]            = self._om_log_level.get()
+        self.cfg["update_check_enabled"] = self._var_update_check.get()
+        self.cfg["update_channel"]       = (
+            "beta" if self._om_update_channel.get().startswith("Beta") else "stable"
+        )
+        self.cfg["telemetry_enabled"]    = self._var_telemetry.get()
         self.cfg["name_template"]     = self._var_name_template.get().strip() or "{DATUM}_{ABSENDER}_{BETREFF}"
         self.cfg["date_format"]       = self._om_date_format.get()
         sr = self._om_space_replacement.get()
