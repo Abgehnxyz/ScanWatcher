@@ -348,7 +348,7 @@ class TrayApp:
                 btn_row, text="☕ Ko-fi", width=120, height=32,
                 fg_color="#29abe0", hover_color="#1a8fbf",
                 command=lambda: webbrowser.open(
-                    "https://ko-fi.com/NovaNetwork"),
+                    "https://ko-fi.com/novanetwork"),
             ).pack(side="left")
 
             ctk.CTkButton(
@@ -362,7 +362,7 @@ class TrayApp:
 
     def _open_kofi(self, icon=None, item=None):
         import webbrowser
-        webbrowser.open("https://ko-fi.com/NovaNetwork")
+        webbrowser.open("https://ko-fi.com/novanetwork")
 
     def _recent_menu_items(self):
         recent = get_recent_files()[:5]

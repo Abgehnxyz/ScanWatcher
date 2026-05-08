@@ -1,6 +1,6 @@
 # Ko-fi – Nova Network
 
-> Seite: ko-fi.com/NovaNetwork  ← URL nach Registrierung anpassen
+> Seite: ko-fi.com/novanetwork
 
 ---
 

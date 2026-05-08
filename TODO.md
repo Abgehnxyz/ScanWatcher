@@ -80,7 +80,7 @@
 - [x] Ko-fi-Link im Tray-Kontextmenü „☕ Scan Watcher unterstützen"
 - [x] Ko-fi-Button im About-Dialog
 - [x] Ko-fi-Link in README.md und Installer-Begrüßung
-- [ ] Ko-fi-Username festlegen und URL in Code aktualisieren (aktuell Platzhalter `ko-fi.com/NovaNetwork`)
+- [x] Ko-fi-Username festlegen und URL in Code aktualisieren (`ko-fi.com/novanetwork`)
 
 ---
 

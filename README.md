@@ -4,7 +4,7 @@
 
 [![Release](https://img.shields.io/github/v/release/Abgehnxyz/ScanWatcher)](https://github.com/Abgehnxyz/ScanWatcher/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Spenden-29abe0)](https://ko-fi.com/NovaNetwork)
+[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Spenden-29abe0)](https://ko-fi.com/novanetwork)
 
 ---
 
@@ -156,4 +156,4 @@ MIT License – siehe [LICENSE](LICENSE)
 Scan Watcher ist kostenlos und Open Source.  
 Wenn dir das Tool hilft, freuen wir uns über deine Unterstützung auf Patreon:
 
-**[☕ ko-fi.com/NovaNetwork](https://ko-fi.com/NovaNetwork)**
+**[☕ ko-fi.com/novanetwork](https://ko-fi.com/novanetwork)**
