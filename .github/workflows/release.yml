@@ -1,0 +1,99 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set version from tag
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          "VERSION=$version" | Out-File -Append -FilePath $env:GITHUB_ENV
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Tesseract
+        shell: pwsh
+        run: |
+          choco install tesseract --yes --no-progress
+          $tessDir = "C:\Program Files\Tesseract-OCR\tessdata"
+          Invoke-WebRequest `
+            -Uri "https://github.com/tesseract-ocr/tessdata/raw/main/deu.traineddata" `
+            -OutFile "$tessDir\deu.traineddata"
+
+      - name: Build EXE with PyInstaller
+        shell: pwsh
+        run: |
+          $tess = "C:\Program Files\Tesseract-OCR"
+          py -m PyInstaller `
+            --noconfirm `
+            --onedir `
+            --windowed `
+            --name ScanWatcher `
+            --icon assets\icon.ico `
+            --add-data "assets;assets" `
+            "--add-data=$tess\tesseract.exe;tesseract" `
+            "--add-data=$tess\tessdata\deu.traineddata;tesseract/tessdata" `
+            "--add-data=$tess\tessdata\eng.traineddata;tesseract/tessdata" `
+            --collect-data customtkinter `
+            run.py
+
+      - name: Build Installer with Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $iscc `
+            /DAppVersion=$env:VERSION `
+            "/DOutputBaseName=ScanWatcher_Setup_v$env:VERSION" `
+            installer\setup.iss
+
+      - name: Calculate SHA256
+        shell: pwsh
+        run: |
+          $file = "dist\installer\ScanWatcher_Setup_v$env:VERSION.exe"
+          $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+          "$hash  ScanWatcher_Setup_v$env:VERSION.exe" | `
+            Out-File -FilePath "$file.sha256" -Encoding ascii
+          "INSTALLER=$file" | Out-File -Append -FilePath $env:GITHUB_ENV
+
+      - name: Generate changelog from commits
+        shell: pwsh
+        run: |
+          $prevTag = git describe --tags --abbrev=0 HEAD^ 2>$null
+          if ($prevTag) {
+            $log = git log "$prevTag..HEAD" --pretty=format:"- %s" --no-merges
+          } else {
+            $log = git log --pretty=format:"- %s" --no-merges
+          }
+          $log | Out-File -FilePath changelog.txt -Encoding utf8
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Scan Watcher v${{ env.VERSION }}"
+          body_path: changelog.txt
+          files: |
+            dist/installer/ScanWatcher_Setup_v${{ env.VERSION }}.exe
+            dist/installer/ScanWatcher_Setup_v${{ env.VERSION }}.exe.sha256
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') || contains(github.ref_name, 'alpha') }}

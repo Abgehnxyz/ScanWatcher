@@ -1,14 +1,21 @@
+#ifndef AppVersion
+  #define AppVersion "1.0.0"
+#endif
+#ifndef OutputBaseName
+  #define OutputBaseName "ScanWatcher_Setup_v" + AppVersion
+#endif
+
 [Setup]
 AppName=Scan Watcher
-AppVersion=1.0.0
-AppVerName=Scan Watcher 1.0.0
+AppVersion={#AppVersion}
+AppVerName=Scan Watcher {#AppVersion}
 AppPublisher=Nova Network
 AppPublisherURL=https://www.nova-network.de
-AppSupportURL=https://www.nova-network.de
+AppSupportURL=https://github.com/Abgehnxyz/ScanWatcher
 AppCopyright=Copyright (C) 2026 Nova Network
 DefaultDirName={autopf}\Nova Network\Scan Watcher
 DefaultGroupName=Nova Network\Scan Watcher
-OutputBaseFilename=ScanWatcher_Setup_v1.0.0
+OutputBaseFilename={#OutputBaseName}
 OutputDir=..\dist\installer
 Compression=lzma2/ultra64
 SolidCompression=yes
