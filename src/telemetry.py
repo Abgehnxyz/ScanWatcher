@@ -1,7 +1,7 @@
 """
 @file    telemetry.py
 @project Scan Watcher
-@company Nova Network GmbH
+@company Nova Network
 @date    Mai 2026
 @brief   Anonymes Opt-in Telemetrie-Modul.
          Sendet nur bei expliziter Zustimmung des Nutzers.
