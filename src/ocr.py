@@ -81,6 +81,13 @@ def _try_pdfplumber(pdf_path: str, pages: int) -> str:
                 t = page.extract_text()
                 if t:
                     text += t + "\n"
+                tables = page.extract_tables()
+                for table in tables:
+                    for row in table:
+                        cells = [c.strip() if isinstance(c, str) else "" for c in row]
+                        line = "  |  ".join(c for c in cells if c)
+                        if line:
+                            text += line + "\n"
     except Exception as e:
         log.debug(f"pdfplumber: {e}")
     return text.strip()
