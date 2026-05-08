@@ -76,14 +76,11 @@
   - Technischer Hinweis, kritischer Bugfix-Alert, neue Feature-Ankündigung
   - Nachricht nur einmalig zeigen (gespeicherte `last_motd_id` in config)
 
-### Patreon-Integration
-- [x] **Patreon-Reminder**: gelegentliche (max. 1× pro Monat) Meldung via Tray
-  - Immer aktiv – nur ein gültiger Supporter-Token deaktiviert die Reminders
-  - Kein Toggle mehr (würde sowieso jeder abschalten)
-- [x] **Supporter-Token**: Patreon-Supporter können Token eingeben → deaktiviert Reminder
-  - Token-Validierung gegen ops.abgehn.xyz (einfacher Hash-Check, kein Patreon OAuth nötig)
-- [ ] Reminder-Text und Intervall server-seitig steuerbar (über denselben MOTD-Endpoint) *(ausstehend – Server-Side)*
-- [x] Patreon-Link in Tray-Kontextmenü als Menüpunkt „❤ Scan Watcher unterstützen"
+### Ko-fi-Integration
+- [x] Ko-fi-Link im Tray-Kontextmenü „☕ Scan Watcher unterstützen"
+- [x] Ko-fi-Button im About-Dialog
+- [x] Ko-fi-Link in README.md und Installer-Begrüßung
+- [ ] Ko-fi-Username festlegen und URL in Code aktualisieren (aktuell Platzhalter `ko-fi.com/NovaNetwork`)
 
 ---
 
