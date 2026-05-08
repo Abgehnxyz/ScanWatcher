@@ -60,7 +60,7 @@
 - [ ] **Sprache**: Englisch als zweite UI-Sprache (i18n-Vorbereitung)
 - [x] **System-Tray**: Letzten 5 umbenannten Dateien im Kontextmenü anzeigen
 - [ ] **Mini-Statusfenster**: optional einblendbares kleines Fenster (immer im Vordergrund)
-- [ ] Update-Check: Beim Start prüfen ob neue Version auf GitHub verfügbar (GitHub Releases API)
+- [x] Update-Check: Beim Start prüfen ob neue Version auf GitHub verfügbar (GitHub Releases API)
 
 ### Updater
 - [ ] Beim Start via GitHub Releases API prüfen ob neue Version verfügbar (`GET /repos/…/releases/latest`)
@@ -83,7 +83,7 @@
 - [ ] **Supporter-Token**: Patreon-Supporter können Token eingeben → schaltet Premium-Features frei und deaktiviert Reminder
   - Token-Validierung gegen ops.abgehn.xyz (einfacher Hash-Check, kein Patreon OAuth nötig)
 - [ ] Reminder-Text und Intervall server-seitig steuerbar (über denselben MOTD-Endpoint)
-- [ ] Patreon-Link in Tray-Kontextmenü als Menüpunkt „❤ Scan Watcher unterstützen"
+- [x] Patreon-Link in Tray-Kontextmenü als Menüpunkt „❤ Scan Watcher unterstützen"
 
 ---
 
@@ -92,7 +92,7 @@
 ### Release & Community
 - [ ] **GitHub Releases** mit automatisch generiertem Changelog aus Commit-Präfixen
 - [ ] **Patreon-Hinweis** im About-Dialog und im Installer-Begrüßungstext
-- [ ] **About-Dialog** im Tray-Menü: Version, Lizenz (MIT), Links (GitHub, Patreon, Nova Network)
+- [x] **About-Dialog** im Tray-Menü: Version, Lizenz (MIT), Links (GitHub, Patreon, Nova Network)
 - [ ] **README.md** erweitern: Screenshots, GIF-Demo, Installations-Anleitung, Feature-Matrix
 - [ ] GitHub Actions: Automatischer Build + Release bei Tag-Push
 

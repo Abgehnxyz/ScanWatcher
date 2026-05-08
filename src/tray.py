@@ -16,7 +16,7 @@ from pathlib import Path
 import pystray
 from PIL import Image, ImageDraw
 
-from . import config, telemetry
+from . import config, telemetry, updater
 from .settings_dialog import SettingsDialog
 from .watcher import WatcherService, get_session_count, get_recent_files
 
@@ -66,6 +66,7 @@ class TrayApp:
     def run(self):
         self._start_watchers()
         self._heartbeat_check()
+        updater.check_async(self.version, self._on_update_available)
 
         menu = pystray.Menu(
             pystray.MenuItem("Scan Watcher – Nova Network", None, enabled=False),
@@ -77,6 +78,9 @@ class TrayApp:
             ),
             pystray.MenuItem("Verarbeitete Dateien …", self._show_log_window),
             pystray.MenuItem("Einstellungen", self._open_settings),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Über Scan Watcher", self._show_about),
+            pystray.MenuItem("❤ Scan Watcher unterstützen", self._open_patreon),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Beenden", self._quit),
         )
@@ -147,6 +151,32 @@ class TrayApp:
         self.cfg = new_cfg
         self._start_watchers()
         self._update_icon()
+
+    def _on_update_available(self, latest_tag: str, release_url: str):
+        if self._icon and self.cfg.get("notifications", True):
+            try:
+                self._icon.notify(
+                    f"Version {latest_tag} verfügbar – Jetzt herunterladen!",
+                    "Scan Watcher – Update",
+                )
+            except Exception:
+                pass
+        log.info(f"Update-Benachrichtigung: {latest_tag}  {release_url}")
+
+    def _show_about(self, icon=None, item=None):
+        self._tk_messagebox(
+            "Über Scan Watcher",
+            f"Scan Watcher  v{self.version}\n"
+            f"Nova Network GmbH\n\n"
+            f"Lizenz: MIT\n"
+            f"GitHub: github.com/Abgehnxyz/ScanWatcher\n"
+            f"Patreon: patreon.com/NovaNetwork\n\n"
+            f"Danke für deine Unterstützung!"
+        )
+
+    def _open_patreon(self, icon=None, item=None):
+        import webbrowser
+        webbrowser.open("https://patreon.com/NovaNetwork")
 
     def _recent_menu_items(self):
         recent = get_recent_files()[:5]
