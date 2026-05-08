@@ -52,8 +52,8 @@ class SettingsDialog(ctk.CTkToplevel):
             text_color="#555",
         ).pack(side="right", padx=20)
 
-        # Inhalt
-        main = ctk.CTkFrame(self, fg_color="transparent")
+        # Inhalt (scrollbar, damit Footer/Speichern-Button auch bei kleinen Bildschirmen sichtbar bleibt)
+        main = ctk.CTkScrollableFrame(self, fg_color="transparent")
         main.pack(fill="both", expand=True, padx=24, pady=20)
 
         self._folder_row(main, "Eingangsordner (Pflicht)", "source_folder")
@@ -223,4 +223,5 @@ class SettingsDialog(ctk.CTkToplevel):
         w, h = 520, 780
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
+        h = min(h, sh - 100)  # Bildschirmhöhe berücksichtigen (Taskbar + Titelleiste)
         self.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")

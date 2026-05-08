@@ -6,16 +6,16 @@ echo ============================================
 echo.
 
 echo [1/3] PyInstaller – EXE erstellen...
-py -m PyInstaller ^
+python -m PyInstaller ^
   --noconfirm ^
   --onedir ^
   --windowed ^
   --name ScanWatcher ^
   --icon assets\icon.ico ^
   --add-data "assets;assets" ^
-  --add-data "D:\Program Files\Tesseract-OCR\tesseract.exe;tesseract" ^
-  --add-data "D:\Program Files\Tesseract-OCR\tessdata\deu.traineddata;tesseract/tessdata" ^
-  --add-data "D:\Program Files\Tesseract-OCR\tessdata\eng.traineddata;tesseract/tessdata" ^
+  --add-data "C:\Program Files\Tesseract-OCR\tesseract.exe;tesseract" ^
+  --add-data "C:\Program Files\Tesseract-OCR\tessdata\deu.traineddata;tesseract/tessdata" ^
+  --add-data "C:\Program Files\Tesseract-OCR\tessdata\eng.traineddata;tesseract/tessdata" ^
   --collect-data customtkinter ^
   run.py
 
