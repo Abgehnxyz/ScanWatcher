@@ -103,9 +103,9 @@
 - [ ] Konfidenz-Score: wenn OCR unter Schwellenwert, Datei als "PRÜFEN_" prefixen
 
 ### Sicherheit & Robustheit
-- [ ] Watched-Folder Lese-/Schreibrechte beim Start prüfen, Fehler klar meldennachricht
+- [x] Watched-Folder Lese-/Schreibrechte beim Start prüfen, Fehler klar melden
 - [ ] `UNLESBAR_`-Dateien separat in eigenem Unterordner ablegen (konfigurierbar)
-- [ ] Crash-Report: Bei unbehandelten Exceptions lokale Datei + optionaler Upload zu Abgehn Ops
+- [x] Crash-Report: Bei unbehandelten Exceptions lokale Datei (crash.log im AppData-Ordner)
 
 ---
 
@@ -115,7 +115,7 @@
 - [x] Unit-Tests für Benennungsschema-Templates (wenn implementiert)
 - [ ] `build.bat` auf `py` statt `python` umstellen (Windows-Kompatibilität)
 - [ ] Installer: Tesseract optional mitbündeln oder separaten Download-Link anbieten
-- [ ] `config.json` Schema-Version für Migration bei Breaking Changes
+- [x] `config.json` Schema-Version für Migration bei Breaking Changes
 
 ---
 

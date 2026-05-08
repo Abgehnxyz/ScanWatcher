@@ -16,7 +16,10 @@ from pathlib import Path
 import keyring
 
 
+CONFIG_VERSION = 2
+
 DEFAULT_CONFIG = {
+    "config_version": CONFIG_VERSION,
     "source_folder": "",
     "target_folder": "",
     "tesseract_exe": "tesseract/tesseract.exe",
@@ -128,6 +131,7 @@ def load() -> dict:
         }]
 
     cfg = {**DEFAULT_CONFIG, **data}
+    cfg["config_version"] = CONFIG_VERSION  # immer auf aktueller Version halten
 
     # Alle Model-Keys aus Credential Manager laden
     for model in _KEY_ACCOUNTS:

@@ -187,11 +187,22 @@ class WatcherService:
     def start(self):
         if self._observer and self._observer.is_alive():
             return
+        src = self.cfg["source_folder"]
+        if not os.path.isdir(src):
+            log.error(f"Eingangsordner nicht gefunden: {src}")
+            return
+        if not os.access(src, os.R_OK | os.W_OK):
+            log.error(f"Keine Lese-/Schreibrechte fuer: {src}")
+            return
+        tgt = self.cfg.get("target_folder", "").strip()
+        if tgt and not os.path.isdir(tgt):
+            log.error(f"Ausgangsordner nicht gefunden: {tgt}")
+            return
         self._observer = Observer()
         handler = ScanHandler(self.cfg, notify_cb=self._notify_cb)
-        self._observer.schedule(handler, self.cfg["source_folder"], recursive=False)
+        self._observer.schedule(handler, src, recursive=False)
         self._observer.start()
-        log.info(f"Ueberwachung gestartet: {self.cfg['source_folder']}")
+        log.info(f"Ueberwachung gestartet: {src}")
 
         # Bestehende Dateien beim Start verarbeiten
         threading.Thread(target=self._process_existing, daemon=True).start()

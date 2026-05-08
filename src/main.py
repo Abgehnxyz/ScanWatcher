@@ -10,6 +10,7 @@ import ctypes
 import logging
 import logging.handlers
 import sys
+import traceback
 
 from . import config, telemetry
 
@@ -37,8 +38,30 @@ logging.basicConfig(
 log = logging.getLogger("scan_watcher")
 
 
+def _install_crash_handler():
+    """Schreibt unbehandelte Exceptions in eine separate Crash-Log-Datei."""
+    crash_log = config.CONFIG_DIR / "crash.log"
+
+    def handle(exc_type, exc_value, exc_tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        log.critical(f"Unbehandelte Exception:\n{text}")
+        try:
+            config.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            with open(crash_log, "a", encoding="utf-8") as f:
+                from datetime import datetime
+                f.write(f"\n--- {datetime.now().isoformat()} ---\n{text}")
+        except Exception:
+            pass
+
+    sys.excepthook = handle
+
+
 def main():
     _ensure_single_instance()
+    _install_crash_handler()
     cfg = config.load()
     _level = getattr(logging, cfg.get("log_level", "INFO"), logging.INFO)
     logging.getLogger().setLevel(_level)
