@@ -13,7 +13,9 @@ import sys
 from pathlib import Path
 
 # Logging konfigurieren
-from . import config
+from . import config, telemetry
+
+APP_VERSION = "1.0.9"
 
 
 def _ensure_single_instance():
@@ -42,6 +44,7 @@ def main():
     _level = getattr(logging, cfg.get("log_level", "INFO"), logging.INFO)
     logging.getLogger().setLevel(_level)
     log.info("Scan Watcher gestartet (Nova Network)")
+    telemetry.track_install(APP_VERSION)
 
     # Beim ersten Start: Einstellungen oeffnen
     if not cfg["source_folder"]:
