@@ -77,9 +77,9 @@
   - Nachricht nur einmalig zeigen (gespeicherte `last_motd_id` in config)
 
 ### Patreon-Integration
-- [x] **Opt-in Patreon-Reminder**: gelegentliche (max. 1× pro Monat) freundliche Meldung via Tray
-  - Nur wenn `patreon_reminders` in config aktiviert (Standard: `true`, abschaltbar)
-  - Keine Reminder wenn Nutzer bereits Patreon-Supporter ist (Supporter-Status via Token prüfbar)
+- [x] **Patreon-Reminder**: gelegentliche (max. 1× pro Monat) Meldung via Tray
+  - Immer aktiv – nur ein gültiger Supporter-Token deaktiviert die Reminders
+  - Kein Toggle mehr (würde sowieso jeder abschalten)
 - [x] **Supporter-Token**: Patreon-Supporter können Token eingeben → deaktiviert Reminder
   - Token-Validierung gegen ops.abgehn.xyz (einfacher Hash-Check, kein Patreon OAuth nötig)
 - [ ] Reminder-Text und Intervall server-seitig steuerbar (über denselben MOTD-Endpoint)

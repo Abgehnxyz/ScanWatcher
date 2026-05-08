@@ -44,7 +44,6 @@ DEFAULT_CONFIG = {
     "folder_profiles": [],
     "appearance_mode": "dark",
     "unlesbar_folder": "",
-    "patreon_reminders": True,
     "last_patreon_reminder": "",
     "supporter_token": "",
     "update_channel": "stable",

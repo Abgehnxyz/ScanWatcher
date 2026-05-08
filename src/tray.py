@@ -122,8 +122,6 @@ class TrayApp:
         self._heartbeat_timer.start()
 
     def _maybe_patreon_reminder(self):
-        if not self.cfg.get("patreon_reminders", True):
-            return
         if self.cfg.get("supporter_token", ""):
             return
         last_str = self.cfg.get("last_patreon_reminder", "")

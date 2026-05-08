@@ -165,9 +165,6 @@ class SettingsDialog(ctk.CTkToplevel):
             anchor="w",
         ).pack(fill="x", pady=(0, 4))
 
-        self._var_patreon_reminders = tk.BooleanVar(value=self.cfg.get("patreon_reminders", True))
-        self._toggle_row(main, "Gelegentliche Patreon-Hinweise anzeigen (max. 1×/Monat)", self._var_patreon_reminders)
-
         tok_row = ctk.CTkFrame(main, fg_color="transparent")
         tok_row.pack(fill="x", pady=(6, 0))
         ctk.CTkLabel(tok_row, text="Supporter-Token:", width=130, anchor="w",
@@ -204,7 +201,8 @@ class SettingsDialog(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             main,
-            text="  Supporter-Token deaktiviert Patreon-Hinweise und schaltet Premium-Features frei.",
+            text="  Patreon-Supporter erhalten gelegentlich eine freundliche Dankes-Erinnerung.\n"
+                 "  Nur ein gültiger Supporter-Token deaktiviert diese.",
             font=ctk.CTkFont(size=10), text_color="#4488cc", anchor="w", wraplength=460,
         ).pack(fill="x", pady=(4, 12))
 
@@ -870,7 +868,6 @@ class SettingsDialog(ctk.CTkToplevel):
         self.cfg["update_channel"]       = (
             "beta" if self._om_update_channel.get().startswith("Beta") else "stable"
         )
-        self.cfg["patreon_reminders"]    = self._var_patreon_reminders.get()
         self.cfg["supporter_token"]      = self._var_supporter_token.get().strip()
         self.cfg["telemetry_enabled"]    = self._var_telemetry.get()
         self.cfg["name_template"]     = self._var_name_template.get().strip() or "{DATUM}_{ABSENDER}_{BETREFF}"
