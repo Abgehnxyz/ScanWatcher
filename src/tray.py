@@ -113,13 +113,36 @@ class TrayApp:
                 self.cfg["last_heartbeat"] = date.today().isoformat()
                 config.save(self.cfg)
                 log.debug("Heartbeat gesendet.")
+                self._maybe_patreon_reminder()
         except Exception as e:
             log.debug(f"Heartbeat: {e}")
 
-        # Naechsten Check in 24h einplanen (faengt auch lange laufende Instanzen ab)
         self._heartbeat_timer = threading.Timer(24 * 3600, self._heartbeat_check)
         self._heartbeat_timer.daemon = True
         self._heartbeat_timer.start()
+
+    def _maybe_patreon_reminder(self):
+        if not self.cfg.get("patreon_reminders", True):
+            return
+        if self.cfg.get("supporter_token", ""):
+            return
+        last_str = self.cfg.get("last_patreon_reminder", "")
+        try:
+            last = date.fromisoformat(last_str) if last_str else None
+        except ValueError:
+            last = None
+        if last is not None and (date.today() - last).days < 30:
+            return
+        self.cfg["last_patreon_reminder"] = date.today().isoformat()
+        config.save(self.cfg)
+        if self._icon and self.cfg.get("notifications", True):
+            try:
+                self._icon.notify(
+                    "Scan Watcher gefällt dir? Unterstütz uns auf Patreon! ❤",
+                    "Scan Watcher",
+                )
+            except Exception:
+                pass
 
     def _update_icon(self):
         if self._icon:

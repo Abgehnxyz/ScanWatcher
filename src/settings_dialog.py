@@ -157,6 +157,59 @@ class SettingsDialog(ctk.CTkToplevel):
 
         ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
 
+        # Patreon
+        ctk.CTkLabel(
+            main,
+            text="Patreon-Unterstützung",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        self._var_patreon_reminders = tk.BooleanVar(value=self.cfg.get("patreon_reminders", True))
+        self._toggle_row(main, "Gelegentliche Patreon-Hinweise anzeigen (max. 1×/Monat)", self._var_patreon_reminders)
+
+        tok_row = ctk.CTkFrame(main, fg_color="transparent")
+        tok_row.pack(fill="x", pady=(6, 0))
+        ctk.CTkLabel(tok_row, text="Supporter-Token:", width=130, anchor="w",
+                     font=ctk.CTkFont(size=11)).pack(side="left")
+        self._var_supporter_token = tk.StringVar(value=self.cfg.get("supporter_token", ""))
+        tok_entry = ctk.CTkEntry(tok_row, textvariable=self._var_supporter_token,
+                                 height=32, show="*", placeholder_text="Token hier eingeben…")
+        tok_entry.pack(side="left", fill="x", expand=True, padx=(4, 4))
+
+        def validate_token():
+            import urllib.request, json as _json
+            token = self._var_supporter_token.get().strip()
+            if not token:
+                return
+            try:
+                payload = _json.dumps({"token": token}).encode()
+                req = urllib.request.Request(
+                    "https://ops.abgehn.xyz/api/scanwatcher/validate-token",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    data = _json.loads(resp.read())
+                if data.get("valid"):
+                    messagebox.showinfo("Supporter", "Token gültig – Danke für deine Unterstützung! ❤")
+                else:
+                    messagebox.showerror("Fehler", "Token ungültig oder abgelaufen.")
+            except Exception as e:
+                messagebox.showerror("Fehler", f"Validierung fehlgeschlagen:\n{e}")
+
+        ctk.CTkButton(tok_row, text="Prüfen", width=70, height=32,
+                      command=validate_token).pack(side="right")
+
+        ctk.CTkLabel(
+            main,
+            text="  Supporter-Token deaktiviert Patreon-Hinweise und schaltet Premium-Features frei.",
+            font=ctk.CTkFont(size=10), text_color="#4488cc", anchor="w", wraplength=460,
+        ).pack(fill="x", pady=(4, 12))
+
+        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=(0, 16))
+
         # Telemetrie
         ctk.CTkLabel(
             main,
@@ -817,6 +870,8 @@ class SettingsDialog(ctk.CTkToplevel):
         self.cfg["update_channel"]       = (
             "beta" if self._om_update_channel.get().startswith("Beta") else "stable"
         )
+        self.cfg["patreon_reminders"]    = self._var_patreon_reminders.get()
+        self.cfg["supporter_token"]      = self._var_supporter_token.get().strip()
         self.cfg["telemetry_enabled"]    = self._var_telemetry.get()
         self.cfg["name_template"]     = self._var_name_template.get().strip() or "{DATUM}_{ABSENDER}_{BETREFF}"
         self.cfg["date_format"]       = self._om_date_format.get()
