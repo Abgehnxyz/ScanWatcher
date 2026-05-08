@@ -425,11 +425,13 @@ def _extract_subject(text: str, space_replacement: str = "-", custom_doc_types: 
     return "Dokument"
 
 
-def unique_path(folder: str, filename: str) -> str:
-    """Gibt eindeutigen Zielpfad zurueck (mit _2, _3 bei Konflikt)."""
+def unique_path(folder: str, filename: str, strategy: str = "suffix") -> str:
+    """Gibt eindeutigen Zielpfad zurueck (Suffix _2/_3 oder Ueberschreiben)."""
     import os
     path = os.path.join(folder, filename)
     if not os.path.exists(path):
+        return path
+    if strategy == "overwrite":
         return path
     stem, ext = os.path.splitext(filename)
     i = 2

@@ -132,6 +132,8 @@ class SettingsDialog(ctk.CTkToplevel):
         ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
         self._doc_types_section(main)
         ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+        self._watcher_section(main)
+        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
 
         # Toggles
         self._var_autostart = tk.BooleanVar(value=self.cfg.get("autostart", False))
@@ -185,6 +187,18 @@ class SettingsDialog(ctk.CTkToplevel):
             fg_color="transparent", border_width=1, border_color="#444",
             hover_color="#2a2a3a", command=self.destroy,
         ).pack(side="right", pady=12)
+
+        ctk.CTkButton(
+            footer, text="Importieren", width=100, height=36,
+            fg_color="transparent", border_width=1, border_color="#444",
+            hover_color="#2a2a3a", command=self._import_settings,
+        ).pack(side="left", padx=(20, 4), pady=12)
+
+        ctk.CTkButton(
+            footer, text="Exportieren", width=100, height=36,
+            fg_color="transparent", border_width=1, border_color="#444",
+            hover_color="#2a2a3a", command=self._export_settings,
+        ).pack(side="left", padx=(0, 4), pady=12)
 
     # ------------------------------------------------------------------ Modell
 
@@ -509,6 +523,86 @@ class SettingsDialog(ctk.CTkToplevel):
             self._doc_type_rows.remove(entry_tuple)
         entry_tuple[2].destroy()
 
+    # ------------------------------------------------- Watcher-Konfiguration
+
+    def _watcher_section(self, parent: ctk.CTkFrame):
+        ctk.CTkLabel(
+            parent,
+            text="Watcher-Konfiguration",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 8))
+
+        # Dateitypen
+        ctk.CTkLabel(
+            parent, text="Dateitypen überwachen",
+            font=ctk.CTkFont(size=11), anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        exts_frame = ctk.CTkFrame(parent, fg_color="#1e1e2e", corner_radius=8)
+        exts_frame.pack(fill="x", pady=(0, 8))
+
+        current_exts = [e.lower() for e in self.cfg.get("watch_extensions", [".pdf"])]
+        self._var_ext_pdf  = tk.BooleanVar(value=".pdf" in current_exts)
+        self._var_ext_jpg  = tk.BooleanVar(value=".jpg" in current_exts or ".jpeg" in current_exts)
+        self._var_ext_tiff = tk.BooleanVar(value=".tiff" in current_exts or ".tif" in current_exts)
+        self._var_ext_png  = tk.BooleanVar(value=".png" in current_exts)
+
+        for label, var in [
+            ("PDF", self._var_ext_pdf), ("JPG/JPEG", self._var_ext_jpg),
+            ("TIFF", self._var_ext_tiff), ("PNG", self._var_ext_png),
+        ]:
+            ctk.CTkCheckBox(
+                exts_frame, text=label, variable=var, onvalue=True, offvalue=False,
+            ).pack(side="left", padx=12, pady=10)
+
+        # Namensmuster
+        ctk.CTkLabel(
+            parent, text="Namensmuster (Regex)",
+            font=ctk.CTkFont(size=11), anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+        self._var_name_pattern = tk.StringVar(value=self.cfg.get("name_pattern", ""))
+        ctk.CTkEntry(
+            parent, textvariable=self._var_name_pattern, height=36,
+            placeholder_text=r"Leer = nur numerische Namen  (Bsp.: ^\d{6,}$ für mind. 6 Ziffern)",
+        ).pack(fill="x", pady=(0, 8))
+
+        # OCR Seiten + Stabilitäts-Timeout
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=(0, 8))
+
+        left = ctk.CTkFrame(row, fg_color="transparent")
+        left.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        ctk.CTkLabel(left, text="OCR Seiten (max.)", font=ctk.CTkFont(size=11), anchor="w").pack(fill="x")
+        self._om_ocr_max_pages = ctk.CTkOptionMenu(left, values=["1", "2", "3", "4", "5"], height=36)
+        self._om_ocr_max_pages.set(str(self.cfg.get("ocr_max_pages", 2)))
+        self._om_ocr_max_pages.pack(fill="x")
+
+        right = ctk.CTkFrame(row, fg_color="transparent")
+        right.pack(side="left", fill="x", expand=True)
+        ctk.CTkLabel(right, text="Stabilitäts-Timeout (Sek.)", font=ctk.CTkFont(size=11), anchor="w").pack(fill="x")
+        self._om_stability_timeout = ctk.CTkOptionMenu(
+            right, values=["10", "20", "30", "60", "120"], height=36,
+        )
+        self._om_stability_timeout.set(str(self.cfg.get("stability_timeout", 30)))
+        self._om_stability_timeout.pack(fill="x")
+
+        # Duplikat-Strategie
+        ctk.CTkLabel(
+            parent, text="Duplikat-Strategie",
+            font=ctk.CTkFont(size=11), anchor="w",
+        ).pack(fill="x", pady=(8, 4))
+        self._om_duplicate_strategy = ctk.CTkOptionMenu(
+            parent,
+            values=["Suffix hinzufügen (_2, _3 …)", "Überschreiben"],
+            height=36,
+        )
+        strategy = self.cfg.get("duplicate_strategy", "suffix")
+        self._om_duplicate_strategy.set(
+            "Überschreiben" if strategy == "overwrite" else "Suffix hinzufügen (_2, _3 …)"
+        )
+        self._om_duplicate_strategy.pack(fill="x")
+
     # --------------------------------------------------------- Hilfs-Methoden
 
     def _folder_row(self, parent: ctk.CTkFrame, label: str, key: str):
@@ -604,6 +698,19 @@ class SettingsDialog(ctk.CTkToplevel):
                 custom_doc_types[k] = v
         self.cfg["custom_doc_types"] = custom_doc_types
 
+        # Watcher-Konfiguration
+        exts = []
+        if self._var_ext_pdf.get():   exts.append(".pdf")
+        if self._var_ext_jpg.get():   exts.extend([".jpg", ".jpeg"])
+        if self._var_ext_tiff.get():  exts.extend([".tiff", ".tif"])
+        if self._var_ext_png.get():   exts.append(".png")
+        self.cfg["watch_extensions"]   = exts or [".pdf"]
+        self.cfg["name_pattern"]       = self._var_name_pattern.get().strip()
+        self.cfg["ocr_max_pages"]      = int(self._om_ocr_max_pages.get())
+        self.cfg["stability_timeout"]  = int(self._om_stability_timeout.get())
+        ds = self._om_duplicate_strategy.get()
+        self.cfg["duplicate_strategy"] = "overwrite" if ds == "Überschreiben" else "suffix"
+
         if not self.cfg["source_folder"]:
             messagebox.showerror("Fehler", "Bitte den Eingangsordner angeben.")
             return
@@ -612,6 +719,45 @@ class SettingsDialog(ctk.CTkToplevel):
         self.result = self.cfg
         if self.on_save:
             self.on_save(self.cfg)
+        self.destroy()
+
+    def _export_settings(self):
+        import json
+        path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON", "*.json"), ("Alle Dateien", "*.*")],
+            initialfile="scanwatcher_einstellungen.json",
+            title="Einstellungen exportieren",
+        )
+        if not path:
+            return
+        to_export = {k: v for k, v in self.cfg.items() if not k.endswith("_key")}
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(to_export, f, indent=2, ensure_ascii=False)
+            messagebox.showinfo("Exportiert", f"Einstellungen gespeichert:\n{path}")
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Export fehlgeschlagen:\n{e}")
+
+    def _import_settings(self):
+        import json
+        path = filedialog.askopenfilename(
+            filetypes=[("JSON", "*.json"), ("Alle Dateien", "*.*")],
+            title="Einstellungen importieren",
+        )
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Import fehlgeschlagen:\n{e}")
+            return
+        merged = {**self.cfg, **{k: v for k, v in data.items() if not k.endswith("_key")}}
+        config.save(merged)
+        if self.on_save:
+            self.on_save(merged)
+        messagebox.showinfo("Importiert", "Einstellungen importiert und gespeichert.")
         self.destroy()
 
     def _center(self):

@@ -45,15 +45,15 @@
 - [x] **Absender-Whitelist** editierbar: Eigene Einträge hinzufügen/entfernen (gespeichert in config.json)
 - [x] **Dokumenttypen** editierbar: Eigene Begriffe → Anzeigename
 - [ ] **Ordner-Profil** wechseln: mehrere Ordner-Paare (Quelle → Ziel) verwalten
-- [ ] Einstellungen Export/Import als `.json`
+- [x] Einstellungen Export/Import als `.json`
 - [ ] Verarbeitete Dateien in der App-Oberfläche anzeigen (einfache Log-Liste)
 
 ### Watcher-Konfiguration
-- [ ] **Dateitypen** erweiterbar: neben `.pdf` auch `.jpg`, `.tiff`, `.png` (Bild-OCR)
-- [ ] **Namensmuster** konfigurierbar: aktuell nur rein numerisch; freies Regex möglich machen
-- [ ] **OCR-Seitenzahl** in Einstellungen: wie viele Seiten sollen gelesen werden (Standard: 2)
-- [ ] **Stabilitäts-Timeout** in Einstellungen: wie lange auf stabile Dateigröße warten (Standard: 30s)
-- [ ] Duplikat-Strategie wählbar: `_2`-Suffix / Datum anhängen / überschreiben
+- [x] **Dateitypen** erweiterbar: neben `.pdf` auch `.jpg`, `.tiff`, `.png` (Bild-OCR)
+- [x] **Namensmuster** konfigurierbar: aktuell nur rein numerisch; freies Regex möglich machen
+- [x] **OCR-Seitenzahl** in Einstellungen: wie viele Seiten sollen gelesen werden (Standard: 2)
+- [x] **Stabilitäts-Timeout** in Einstellungen: wie lange auf stabile Dateigröße warten (Standard: 30s)
+- [x] Duplikat-Strategie wählbar: `_2`-Suffix / Datum anhängen / überschreiben
 
 ### UI / UX
 - [ ] **Dark/Light-Mode** Umschalter (customtkinter unterstützt beides)

@@ -1,7 +1,7 @@
 """
 @file    ocr.py
 @project Scan Watcher
-@company Nova Network GmbH
+@company Nova Network
 @date    Mai 2026
 @brief   Text-Extraktion aus PDF-Dateien.
          Stufe 1: pdfplumber (digitaler Textlayer).
@@ -39,14 +39,17 @@ def _resolve_tesseract(tesseract_exe: str) -> str:
     return tesseract_exe
 
 
-def extract_text(pdf_path: str, tesseract_exe: str, pages: int = 2) -> str:
+def extract_text(file_path: str, tesseract_exe: str, pages: int = 2) -> str:
     """
-    Extrahiert Text aus einer PDF-Datei.
+    Extrahiert Text aus einer PDF- oder Bilddatei.
     Gibt leeren String zurueck wenn kein Text lesbar.
     """
-    text = _try_pdfplumber(pdf_path, pages)
+    suffix = Path(file_path).suffix.lower()
+    if suffix in (".jpg", ".jpeg", ".tiff", ".tif", ".png"):
+        return _try_image_ocr(file_path, tesseract_exe)
+    text = _try_pdfplumber(file_path, pages)
     if not text:
-        text = _try_ocr(pdf_path, tesseract_exe, pages)
+        text = _try_ocr(file_path, tesseract_exe, pages)
     return text
 
 
@@ -61,6 +64,18 @@ def _try_pdfplumber(pdf_path: str, pages: int) -> str:
     except Exception as e:
         log.debug(f"pdfplumber: {e}")
     return text.strip()
+
+
+def _try_image_ocr(file_path: str, tesseract_exe: str) -> str:
+    try:
+        pytesseract.pytesseract.tesseract_cmd = _resolve_tesseract(tesseract_exe)
+        img = Image.open(file_path)
+        text = pytesseract.image_to_string(img, lang="deu+eng")
+        log.debug(f"Bild-OCR erfolgreich: {len(text)} Zeichen")
+        return text.strip()
+    except Exception as e:
+        log.warning(f"Bild-OCR fehlgeschlagen: {e}")
+        return ""
 
 
 def _try_ocr(pdf_path: str, tesseract_exe: str, pages: int) -> str:

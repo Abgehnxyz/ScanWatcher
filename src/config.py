@@ -33,6 +33,12 @@ DEFAULT_CONFIG = {
     "last_heartbeat": "",
     "custom_senders": {},
     "custom_doc_types": {},
+    "watch_extensions": [".pdf"],
+    "name_pattern": "",
+    "ocr_max_pages": 2,
+    "stability_timeout": 30,
+    "duplicate_strategy": "suffix",
+    "folder_profiles": [],
 }
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", "~")) / "ScanWatcher"

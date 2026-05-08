@@ -9,6 +9,7 @@
 
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -29,9 +30,22 @@ def get_session_count() -> int:
     return _session_count
 
 
+def is_numeric_file(filename: str, extensions: list | None = None, name_pattern: str = "") -> bool:
+    """Prueft ob Dateiname dem konfigurierten Muster und der Erweiterung entspricht."""
+    p = Path(filename)
+    exts = [e.lower() for e in (extensions or [".pdf"])]
+    if p.suffix.lower() not in exts:
+        return False
+    if name_pattern:
+        try:
+            return bool(re.fullmatch(name_pattern, p.stem))
+        except re.error:
+            pass
+    return p.stem.isdigit()
+
+
 def is_numeric_pdf(filename: str) -> bool:
-    """Prueft ob Dateiname ausschliesslich aus Ziffern besteht (Scanner-Output)."""
-    return Path(filename).stem.isdigit() and filename.lower().endswith(".pdf")
+    return is_numeric_file(filename, [".pdf"])
 
 
 def _wait_for_stable(path: str, timeout: int = 30) -> bool:
@@ -71,7 +85,11 @@ class ScanHandler(FileSystemEventHandler):
             self._handle(event.dest_path)
 
     def _handle(self, path: str):
-        if is_numeric_pdf(os.path.basename(path)):
+        if is_numeric_file(
+            os.path.basename(path),
+            self.cfg.get("watch_extensions", [".pdf"]),
+            self.cfg.get("name_pattern", ""),
+        ):
             threading.Thread(
                 target=process_file,
                 args=(path, self.cfg),
@@ -87,14 +105,15 @@ def process_file(path: str, cfg: dict, notify=None) -> bool:
     """
     global _session_count
     filename = os.path.basename(path)
+    original_ext = Path(filename).suffix.lower()
     log.info(f"Neue Datei erkannt: {filename}")
 
-    if not _wait_for_stable(path):
+    if not _wait_for_stable(path, cfg.get("stability_timeout", 30)):
         log.warning(f"  Datei verschwunden oder Timeout: {filename}")
         return False
 
     try:
-        text = ocr.extract_text(path, cfg["tesseract_exe"])
+        text = ocr.extract_text(path, cfg["tesseract_exe"], pages=cfg.get("ocr_max_pages", 2))
         log.info(f"  Text: {len(text)} Zeichen")
 
         if text:
@@ -117,13 +136,14 @@ def process_file(path: str, cfg: dict, notify=None) -> bool:
             name = f"UNLESBAR_{Path(filename).stem}"
             log.warning("  Kein Text lesbar -> UNLESBAR-Prefix")
 
+        strategy = cfg.get("duplicate_strategy", "suffix")
         target_folder = cfg.get("target_folder", "").strip()
         if target_folder:
-            dest = renamer.unique_path(target_folder, name + ".pdf")
+            dest = renamer.unique_path(target_folder, name + original_ext, strategy)
             shutil.move(path, dest)
         else:
             src_dir = os.path.dirname(path)
-            dest = renamer.unique_path(src_dir, name + ".pdf")
+            dest = renamer.unique_path(src_dir, name + original_ext, strategy)
             os.rename(path, dest)
 
         log.info(f"  OK: {filename}  ->  {os.path.basename(dest)}")
@@ -170,9 +190,11 @@ class WatcherService:
         if not folder or not os.path.isdir(folder):
             return
         time.sleep(1)  # Kurz warten bis Observer laeuft
+        exts = self.cfg.get("watch_extensions", [".pdf"])
+        pattern = self.cfg.get("name_pattern", "")
         found = [
             f for f in os.listdir(folder)
-            if is_numeric_pdf(f) and os.path.isfile(os.path.join(folder, f))
+            if is_numeric_file(f, exts, pattern) and os.path.isfile(os.path.join(folder, f))
         ]
         if found:
             log.info(f"  {len(found)} bestehende Datei(en) im Eingangsordner gefunden...")
