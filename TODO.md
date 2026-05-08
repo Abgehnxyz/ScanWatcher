@@ -34,7 +34,7 @@
   - `heartbeat` – wöchentlich: aktive Installation, Version
   - `uninstall` – via Inno Setup Deinstallations-Hook *(ausstehend – Installer)*
 - [x] Endpoint: `https://ops.abgehn.xyz/api/scanwatcher/event` (POST, JSON)
-- [ ] Dashboard in **Abgehn Ops** (abgehn.xyz): Aktive Installationen, Umbenennungen gesamt, Modell-Nutzung, Version-Verteilung *(ausstehend – Server)*
+- [ ] Dashboard in **Abgehn Ops** (abgehn.xyz): Aktive Installationen, Umbenennungen gesamt, Modell-Nutzung, Version-Verteilung *(ausstehend – Server-Side)*
 - [x] Lokale Opt-out-Möglichkeit: Toggle "Anonyme Nutzungsstatistiken senden" in Einstellungen
 
 ---
@@ -82,7 +82,7 @@
   - Kein Toggle mehr (würde sowieso jeder abschalten)
 - [x] **Supporter-Token**: Patreon-Supporter können Token eingeben → deaktiviert Reminder
   - Token-Validierung gegen ops.abgehn.xyz (einfacher Hash-Check, kein Patreon OAuth nötig)
-- [ ] Reminder-Text und Intervall server-seitig steuerbar (über denselben MOTD-Endpoint)
+- [ ] Reminder-Text und Intervall server-seitig steuerbar (über denselben MOTD-Endpoint) *(ausstehend – Server-Side)*
 - [x] Patreon-Link in Tray-Kontextmenü als Menüpunkt „❤ Scan Watcher unterstützen"
 
 ---
@@ -90,16 +90,16 @@
 ## 🟢 Niedrige Priorität / Langfristig
 
 ### Release & Community
-- [ ] **GitHub Releases** mit automatisch generiertem Changelog aus Commit-Präfixen
-- [ ] **Patreon-Hinweis** im About-Dialog und im Installer-Begrüßungstext
+- [x] **GitHub Releases** mit automatisch generiertem Changelog aus Commit-Präfixen
+- [x] **Patreon-Hinweis** im About-Dialog und im Installer-Begrüßungstext
 - [x] **About-Dialog** im Tray-Menü: Version, Lizenz (MIT), Links (GitHub, Patreon, Nova Network)
-- [ ] **README.md** erweitern: Screenshots, GIF-Demo, Installations-Anleitung, Feature-Matrix
-- [ ] GitHub Actions: Automatischer Build + Release bei Tag-Push
+- [x] **README.md** erweitern: Screenshots, GIF-Demo, Installations-Anleitung, Feature-Matrix
+- [x] GitHub Actions: Automatischer Build + Release bei Tag-Push
 
 ### OCR-Qualität
 - [x] **Vorverarbeitung**: Kontrast/Schärfe-Filter vor Tesseract (verbessert Erkennung bei schwachen Scans)
 - [ ] Zusätzliche Tesseract-Sprachen optional nachladen
-- [ ] **pdfplumber** Fallback verbessern: Tabellenstruktur für Rechnungen auswerten
+- [x] **pdfplumber** Fallback verbessern: Tabellenstruktur für Rechnungen auswerten
 - [x] Konfidenz-Score: wenn OCR unter Schwellenwert, Datei als "PRÜFEN_" prefixen
 
 ### Sicherheit & Robustheit
