@@ -1,70 +1,159 @@
 # Scan Watcher
-**Nova Network** – Automatische PDF-Umbenennung fuer Scan-Eingangskoerbe
+
+**Nova Network** – Automatische OCR-Umbenennung für Scan-Eingangsordner unter Windows
+
+[![Release](https://img.shields.io/github/v/release/Abgehnxyz/ScanWatcher)](https://github.com/Abgehnxyz/ScanWatcher/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Support on Patreon](https://img.shields.io/badge/Patreon-Support-orange)](https://patreon.com/NovaNetworkone)
+
+---
+
+![Scan Watcher Screenshot](pictures/Scan_Watcher.png)
+
+---
 
 ## Was es macht
-Scan Watcher ueberwacht einen lokalen Scan-Ordner. Sobald der Scanner eine neue
-Datei mit reinem Zahlennamen ablegt (z.B. `202605070001.pdf`), wird sie
-automatisch per OCR analysiert, sinnvoll umbenannt und ins Archiv verschoben.
+
+Scan Watcher überwacht einen lokalen Scan-Ordner im Hintergrund.  
+Sobald der Scanner eine neue Datei mit reinem Zahlennamen ablegt (z. B. `202605070001.pdf`),  
+wird sie automatisch per OCR analysiert, sinnvoll umbenannt und ins Archiv verschoben.
 
 **Beispiel:**
-`202605070001.pdf` → `2026-04-22_KRAVAG_Police-407-85-350295747_Betriebsschutz.pdf`
+```
+202605070001.pdf  →  2026-04-22_KRAVAG_Police-407-85-350295747.pdf
+```
 
-## Voraussetzungen
-- Windows 10/11 (64-bit)
-- [Python 3.11+](https://python.org/downloads)
-- [Tesseract-OCR fuer Windows](https://github.com/UB-Mannheim/tesseract/wiki)
+---
+
+## Features
+
+| Feature | Beschreibung |
+|---------|-------------|
+| **OCR-Texterkennung** | pdfplumber (Textlayer) + Tesseract (Scan) mit Bildvorverarbeitung |
+| **KI-Umbenennung** | Claude, GPT-4o-mini, Gemini, Mistral, Groq oder Ollama (offline) |
+| **Regelbasiert** | Funktioniert ohne KI – erkennt Absender, Datum, Dokumenttyp aus Text |
+| **Benennungsschema** | Frei konfigurierbares Template: `{DATUM}_{ABSENDER}_{BETREFF}` |
+| **Mehrere Ordner-Profile** | Gleichzeitig mehrere Quelle→Ziel-Paare überwachen |
+| **Dateitype** | PDF, JPG, PNG, TIFF unterstützt |
+| **Konfidenz-Check** | Dateien mit schlechter OCR erhalten `PRUEFEN_`-Prefix automatisch |
+| **System-Tray** | Läuft im Hintergrund, Tray-Icon mit Statusanzeige |
+| **Dark/Light-Mode** | customtkinter Dark- und Light-Theme |
+| **Update-Check** | Automatisch beim Start, In-App-Installer-Download |
+| **Telemetrie** | DSGVO-konform, anonymes Opt-in, abschaltbar |
+| **Patreon-Support** | Supporter-Token deaktiviert Erinnerungs-Meldungen |
+
+---
+
+## Installation (Fertig-Installer)
+
+1. Aktuelle Version unter [Releases](https://github.com/Abgehnxyz/ScanWatcher/releases/latest) herunterladen
+2. `ScanWatcher_Setup_vX.X.X.exe` ausführen
+3. Scan Watcher startet automatisch nach der Installation
+
+**Systemvoraussetzungen:** Windows 10/11 (64-bit)
+
+---
 
 ## Installation (Entwicklung)
-```
-py -m pip install -r requirements.txt
-```
 
-## Starten
-```
+### Voraussetzungen
+- Python 3.11+
+- [Tesseract-OCR für Windows](https://github.com/UB-Mannheim/tesseract/wiki) (inkl. Deutsch-Sprachpaket)
+
+### Setup
+```powershell
+git clone https://github.com/Abgehnxyz/ScanWatcher.git
+cd ScanWatcher
+py -m pip install -r requirements.txt
 py run.py
 ```
-Beim ersten Start oeffnet sich automatisch der Einstellungs-Dialog.
+
+Beim ersten Start öffnet sich automatisch der Einstellungs-Dialog.
+
+---
+
+## KI-Modelle konfigurieren
+
+Scan Watcher unterstützt folgende Benennungs-Modi:
+
+| Modus | Kosten | Internet | Setup |
+|-------|--------|----------|-------|
+| **Regelbasiert** | kostenlos | nein | keins |
+| **Ollama (lokal)** | kostenlos | nein | [Ollama installieren](https://ollama.com) |
+| **Claude (Haiku)** | ~$0.001/Dok | ja | [API-Key](https://console.anthropic.com) |
+| **GPT-4o-mini** | ~$0.001/Dok | ja | [API-Key](https://platform.openai.com) |
+| **Gemini Flash** | kostenloser Tier | ja | [API-Key](https://aistudio.google.com) |
+| **Mistral Small** | ~$0.001/Dok | ja | [API-Key](https://console.mistral.ai) |
+| **Groq** | kostenloser Tier | ja | [API-Key](https://console.groq.com) |
+
+API-Keys werden verschlüsselt im **Windows Credential Manager** gespeichert.
+
+---
+
+## EXE selbst bauen
+
+```bat
+build.bat
+```
+
+Ergebnis:
+- `dist/ScanWatcher/ScanWatcher.exe`
+- `dist/installer/ScanWatcher_Setup_vX.X.X.exe`
+
+Benötigt [Inno Setup 6](https://jrsoftware.org/isdl.php) für den Installer.
+
+---
+
+## Konfiguration
+
+Einstellungen werden gespeichert unter:
+```
+%APPDATA%\ScanWatcher\config.json
+```
+
+Die vollständige Konfiguration ist über den Einstellungs-Dialog zugänglich  
+(Tray-Icon → Rechtsklick → Einstellungen).
+
+---
 
 ## Projektstruktur
+
 ```
 scan-watcher/
+├── .github/workflows/
+│   └── release.yml        # Auto-Build bei Tag-Push
 ├── src/
 │   ├── main.py            # Einstiegspunkt
-│   ├── tray.py            # System-Tray-Icon
-│   ├── settings_dialog.py # Einstellungs-Fenster
-│   ├── watcher.py         # Dateiueberwachung
-│   ├── ocr.py             # Text-Extraktion (pdfplumber + Tesseract)
-│   ├── renamer.py         # Namens-Bestimmung (Regeln + opt. Claude API)
+│   ├── tray.py            # System-Tray-Icon & UI
+│   ├── settings_dialog.py # Einstellungs-Dialog
+│   ├── watcher.py         # Dateiüberwachung (watchdog)
+│   ├── ocr.py             # OCR (pdfplumber + Tesseract + PIL)
+│   ├── renamer.py         # Namensstrategie (Regeln + KI)
+│   ├── updater.py         # GitHub-Update-Check
+│   ├── telemetry.py       # Anonyme Nutzungsstatistiken
 │   └── config.py          # Konfigurationsverwaltung
 ├── assets/
-│   └── icon.png           # App-Icon (64x64, RGBA)
+│   └── icon.png
 ├── installer/
-│   └── setup.iss          # Inno Setup Installer-Skript
+│   └── setup.iss          # Inno Setup Skript
 ├── tests/
-│   └── test_renamer.py    # Unit-Tests
-├── run.py                 # Start & PyInstaller-Einstieg
-├── build.bat              # EXE + Installer bauen
+│   └── test_renamer.py
+├── run.py
+├── build.bat
 └── requirements.txt
 ```
 
-## EXE bauen
-```
-build.bat
-```
-Ergebnis: `dist/ScanWatcher/ScanWatcher.exe` + `dist/installer/ScanWatcher_Setup_v1.0.0.exe`
-
-Benoetigt [Inno Setup 6](https://jrsoftware.org/isdl.php) fuer den Installer.
-
-## Konfiguration
-Einstellungen werden gespeichert in:
-`%APPDATA%\ScanWatcher\config.json`
-
-| Einstellung | Beschreibung |
-|---|---|
-| `source_folder` | Scan-Ordner (lokal, z.B. D:\Scan) |
-| `target_folder` | Ziel-Ordner (Netzwerk oder lokal) |
-| `tesseract_exe` | Pfad zur tesseract.exe |
-| `anthropic_key` | Claude API-Key (optional, verbessert Benennung) |
+---
 
 ## Lizenz
-Proprietaer – Nova Network. Alle Rechte vorbehalten.
+
+MIT License – siehe [LICENSE](LICENSE)
+
+---
+
+## Unterstützen
+
+Scan Watcher ist kostenlos und Open Source.  
+Wenn dir das Tool hilft, freuen wir uns über deine Unterstützung auf Patreon:
+
+**[❤ patreon.com/NovaNetworkone](https://patreon.com/NovaNetworkone)**
