@@ -111,8 +111,8 @@
 
 ## 🔧 Technische Schulden
 
-- [ ] Unit-Tests für `_via_ollama()` und `_via_claude()` (Mock-HTTP)
-- [ ] Unit-Tests für Benennungsschema-Templates (wenn implementiert)
+- [x] Unit-Tests für `_via_ollama()` und `_via_claude()` (Mock-HTTP)
+- [x] Unit-Tests für Benennungsschema-Templates (wenn implementiert)
 - [ ] `build.bat` auf `py` statt `python` umstellen (Windows-Kompatibilität)
 - [ ] Installer: Tesseract optional mitbündeln oder separaten Download-Link anbieten
 - [ ] `config.json` Schema-Version für Migration bei Breaking Changes
