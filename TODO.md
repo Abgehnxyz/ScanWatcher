@@ -97,10 +97,10 @@
 - [ ] GitHub Actions: Automatischer Build + Release bei Tag-Push
 
 ### OCR-Qualität
-- [ ] **Vorverarbeitung**: Kontrast/Schärfe-Filter vor Tesseract (verbessert Erkennung bei schwachen Scans)
+- [x] **Vorverarbeitung**: Kontrast/Schärfe-Filter vor Tesseract (verbessert Erkennung bei schwachen Scans)
 - [ ] Zusätzliche Tesseract-Sprachen optional nachladen
 - [ ] **pdfplumber** Fallback verbessern: Tabellenstruktur für Rechnungen auswerten
-- [ ] Konfidenz-Score: wenn OCR unter Schwellenwert, Datei als "PRÜFEN_" prefixen
+- [x] Konfidenz-Score: wenn OCR unter Schwellenwert, Datei als "PRÜFEN_" prefixen
 
 ### Sicherheit & Robustheit
 - [x] Watched-Folder Lese-/Schreibrechte beim Start prüfen, Fehler klar melden

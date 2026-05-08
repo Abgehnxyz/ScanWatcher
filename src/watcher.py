@@ -121,14 +121,18 @@ def process_file(path: str, cfg: dict, notify=None) -> bool:
         return False
 
     try:
-        text = ocr.extract_text(path, cfg["tesseract_exe"], pages=cfg.get("ocr_max_pages", 2))
-        log.info(f"  Text: {len(text)} Zeichen")
+        ocr_result = ocr.extract_text_with_confidence(
+            path, cfg["tesseract_exe"], pages=cfg.get("ocr_max_pages", 2)
+        )
+        text = ocr_result.text
+        log.info(f"  Text: {len(text)} Zeichen, Konfidenz: {ocr_result.confidence:.0f}%")
 
         if text:
             model_keys = {
                 m: cfg.get(f"{m}_key", "")
                 for m in ("claude", "openai", "gemini", "mistral", "groq")
             }
+            pruefen_prefix = "PRUEFEN_" if ocr.needs_review(ocr_result) else ""
             name = renamer.determine_name(
                 text, filename,
                 active_model=cfg.get("active_model", "rules"),
@@ -140,6 +144,8 @@ def process_file(path: str, cfg: dict, notify=None) -> bool:
                 custom_senders=cfg.get("custom_senders", {}),
                 custom_doc_types=cfg.get("custom_doc_types", {}),
             )
+            if pruefen_prefix and not name.startswith("UNLESBAR_"):
+                name = pruefen_prefix + name
         else:
             name = f"UNLESBAR_{Path(filename).stem}"
             log.warning("  Kein Text lesbar -> UNLESBAR-Prefix")
