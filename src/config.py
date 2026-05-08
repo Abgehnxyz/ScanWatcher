@@ -23,8 +23,12 @@ DEFAULT_CONFIG = {
     "autostart": False,
     "notifications": True,
     "log_level": "INFO",
-    "ollama_enabled": False,
     "ollama_model": "llama3.2",
+    "telemetry_enabled": False,
+    "name_template": "{DATUM}_{ABSENDER}_{BETREFF}",
+    "date_format": "YYYY-MM-DD",
+    "space_replacement": "-",
+    "active_model": "rules",
 }
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", "~")) / "ScanWatcher"
@@ -33,29 +37,51 @@ _REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 _REG_NAME = "ScanWatcher"
 
 _SERVICE = "ScanWatcher_NovaNetwork"
-_ACCOUNT = "anthropic_api_key"
+
+# Keyring-Account-Namen pro Anbieter (claude bleibt backward-kompatibel)
+_KEY_ACCOUNTS = {
+    "claude":  "anthropic_api_key",
+    "openai":  "openai_api_key",
+    "gemini":  "gemini_api_key",
+    "mistral": "mistral_api_key",
+    "groq":    "groq_api_key",
+}
 
 
-def get_anthropic_key() -> str:
-    """API-Key sicher aus Windows Credential Manager laden."""
+def get_model_key(model: str) -> str:
+    """API-Key eines Anbieters sicher aus dem Windows Credential Manager laden."""
+    account = _KEY_ACCOUNTS.get(model, "")
+    if not account:
+        return ""
     try:
-        return keyring.get_password(_SERVICE, _ACCOUNT) or ""
+        return keyring.get_password(_SERVICE, account) or ""
     except Exception:
         return ""
 
 
-def set_anthropic_key(key: str) -> None:
-    """API-Key sicher im Windows Credential Manager speichern."""
+def set_model_key(model: str, key: str) -> None:
+    """API-Key eines Anbieters sicher im Windows Credential Manager speichern."""
+    account = _KEY_ACCOUNTS.get(model, "")
+    if not account:
+        return
     try:
         if key:
-            keyring.set_password(_SERVICE, _ACCOUNT, key)
+            keyring.set_password(_SERVICE, account, key)
         else:
             try:
-                keyring.delete_password(_SERVICE, _ACCOUNT)
+                keyring.delete_password(_SERVICE, account)
             except Exception:
                 pass
     except Exception:
         pass
+
+
+# Backward-Compat-Aliase (alter Code nutzte anthropic_key direkt)
+def get_anthropic_key() -> str:
+    return get_model_key("claude")
+
+def set_anthropic_key(key: str) -> None:
+    set_model_key("claude", key)
 
 
 def load() -> dict:
@@ -63,29 +89,44 @@ def load() -> dict:
         try:
             with open(CONFIG_FILE, encoding="utf-8") as f:
                 data = json.load(f)
-            cfg = {**DEFAULT_CONFIG, **data}
         except Exception:
-            cfg = DEFAULT_CONFIG.copy()
+            data = {}
     else:
-        cfg = DEFAULT_CONFIG.copy()
+        data = {}
 
-    # API-Key: keyring hat Priorität; ggf. aus alter config.json migrieren
-    keyring_key = get_anthropic_key()
-    if keyring_key:
-        cfg["anthropic_key"] = keyring_key
-    elif cfg.get("anthropic_key"):
-        # Einmalige Migration: Key aus JSON in Credential Manager überführen
-        set_anthropic_key(cfg["anthropic_key"])
-    else:
-        cfg["anthropic_key"] = ""
+    # Migration: active_model aus alten Feldern ableiten
+    if "active_model" not in data:
+        old_claude_key = get_model_key("claude")
+        if data.get("ollama_enabled"):
+            data["active_model"] = "ollama"
+        elif old_claude_key or data.get("anthropic_key"):
+            data["active_model"] = "claude"
+        # else: DEFAULT_CONFIG liefert "rules"
+
+    # Migration: alter anthropic_key aus JSON → Credential Manager
+    if data.get("anthropic_key"):
+        if not get_model_key("claude"):
+            set_model_key("claude", data["anthropic_key"])
+        del data["anthropic_key"]
+
+    cfg = {**DEFAULT_CONFIG, **data}
+
+    # Alle Model-Keys aus Credential Manager laden
+    for model in _KEY_ACCOUNTS:
+        cfg[f"{model}_key"] = get_model_key(model)
+
     return cfg
 
 
 def save(cfg: dict) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    # API-Key sicher speichern – nicht in JSON
-    set_anthropic_key(cfg.get("anthropic_key", ""))
-    to_save = {k: v for k, v in cfg.items() if k != "anthropic_key"}
+    # Alle API-Keys sicher speichern – nicht in JSON
+    for model in _KEY_ACCOUNTS:
+        key_field = f"{model}_key"
+        if key_field in cfg:
+            set_model_key(model, cfg.get(key_field, ""))
+    # Nicht-serialisierbare Felder ausschliessen
+    to_save = {k: v for k, v in cfg.items() if not k.endswith("_key")}
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(to_save, f, indent=2, ensure_ascii=False)
     _apply_autostart(cfg.get("autostart", False))

@@ -17,7 +17,7 @@ from pathlib import Path
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-from . import config, ocr, renamer
+from . import config, ocr, renamer, telemetry
 
 log = logging.getLogger("scan_watcher.watcher")
 
@@ -98,11 +98,18 @@ def process_file(path: str, cfg: dict, notify=None) -> bool:
         log.info(f"  Text: {len(text)} Zeichen")
 
         if text:
+            model_keys = {
+                m: cfg.get(f"{m}_key", "")
+                for m in ("claude", "openai", "gemini", "mistral", "groq")
+            }
             name = renamer.determine_name(
                 text, filename,
-                cfg.get("anthropic_key", ""),
-                cfg.get("ollama_enabled", False),
-                cfg.get("ollama_model", "llama3.2"),
+                active_model=cfg.get("active_model", "rules"),
+                model_keys=model_keys,
+                ollama_model=cfg.get("ollama_model", "llama3.2"),
+                name_template=cfg.get("name_template", "{DATUM}_{ABSENDER}_{BETREFF}"),
+                date_format=cfg.get("date_format", "YYYY-MM-DD"),
+                space_replacement=cfg.get("space_replacement", "-"),
             )
         else:
             name = f"UNLESBAR_{Path(filename).stem}"
@@ -119,6 +126,8 @@ def process_file(path: str, cfg: dict, notify=None) -> bool:
 
         log.info(f"  OK: {filename}  ->  {os.path.basename(dest)}")
 
+        telemetry.track_rename(cfg.get("active_model", "rules"), success=True)
+
         with _count_lock:
             _session_count += 1
 
@@ -132,6 +141,7 @@ def process_file(path: str, cfg: dict, notify=None) -> bool:
 
     except Exception as e:
         log.error(f"  Fehler bei {filename}: {e}")
+        telemetry.track_rename("none", success=False)
         return False
 
 
