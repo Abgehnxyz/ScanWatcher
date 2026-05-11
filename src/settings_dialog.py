@@ -102,12 +102,14 @@ class SettingsDialog(ctk.CTkToplevel):
             text_color="white",
         ).pack(side="left", padx=20)
 
-        ctk.CTkLabel(
+        ctk.CTkButton(
             header,
-            text="Nova Network",
+            text="☕ Unterstützen",
             font=ctk.CTkFont(size=11),
-            text_color="#555",
-        ).pack(side="right", padx=20)
+            width=130, height=32,
+            fg_color="#29abe0", hover_color="#1a8fbf", text_color="white",
+            command=lambda: __import__("webbrowser").open("https://ko-fi.com/novanetwork"),
+        ).pack(side="right", padx=16)
 
         main = ctk.CTkScrollableFrame(self, fg_color="transparent")
         main.pack(fill="both", expand=True, padx=24, pady=20)
@@ -134,26 +136,6 @@ class SettingsDialog(ctk.CTkToplevel):
         self._toggle_row(main, "Windows-Benachrichtigungen anzeigen", self._var_notifications)
 
         self._option_row(main, "Log-Level (Protokollierung)", "log_level", ["INFO", "DEBUG", "WARNING"])
-
-        ctk.CTkLabel(
-            main,
-            text="Erscheinungsbild",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            anchor="w",
-        ).pack(fill="x", pady=(8, 4))
-
-        _APPEARANCE_LABELS = {"dark": "Dunkel", "light": "Hell", "system": "System"}
-        _APPEARANCE_KEYS   = {v: k for k, v in _APPEARANCE_LABELS.items()}
-        self._appearance_keys = _APPEARANCE_KEYS
-        current_mode = self.cfg.get("appearance_mode", "dark")
-        self._om_appearance = ctk.CTkOptionMenu(
-            main,
-            values=list(_APPEARANCE_LABELS.values()),
-            height=36,
-            command=lambda v: ctk.set_appearance_mode(_APPEARANCE_KEYS[v]),
-        )
-        self._om_appearance.set(_APPEARANCE_LABELS.get(current_mode, "Dunkel"))
-        self._om_appearance.pack(fill="x", pady=(0, 4))
 
         ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
 
@@ -532,7 +514,7 @@ class SettingsDialog(ctk.CTkToplevel):
             anchor="w",
         ).pack(fill="x", pady=(0, 8))
 
-        self._sender_rows_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self._sender_rows_frame = tk.Frame(parent, background="#141420", bd=0, highlightthickness=0)
         self._sender_rows_frame.pack(fill="x")
 
         self._sender_rows: list[tuple] = []
@@ -600,7 +582,7 @@ class SettingsDialog(ctk.CTkToplevel):
             anchor="w",
         ).pack(fill="x", pady=(0, 8))
 
-        self._doc_type_rows_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self._doc_type_rows_frame = tk.Frame(parent, background="#141420", bd=0, highlightthickness=0)
         self._doc_type_rows_frame.pack(fill="x")
 
         self._doc_type_rows: list[tuple] = []
@@ -681,6 +663,7 @@ class SettingsDialog(ctk.CTkToplevel):
         ]:
             ctk.CTkCheckBox(
                 exts_frame, text=label, variable=var, onvalue=True, offvalue=False,
+                width=100,
             ).pack(side="left", padx=12, pady=10)
 
         # Namensmuster
@@ -861,11 +844,6 @@ class SettingsDialog(ctk.CTkToplevel):
         self.cfg["duplicate_strategy"] = "overwrite" if ds == "Überschreiben" else "suffix"
         unlesbar_var = getattr(self, "_var_unlesbar_folder", None)
         self.cfg["unlesbar_folder"] = unlesbar_var.get().strip() if unlesbar_var else ""
-
-        # Erscheinungsbild
-        self.cfg["appearance_mode"] = self._appearance_keys.get(
-            self._om_appearance.get(), "dark"
-        )
 
         if not self.cfg.get("folder_profiles"):
             messagebox.showerror("Fehler", "Bitte mindestens einen Eingangsordner angeben.")

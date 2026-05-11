@@ -87,7 +87,7 @@ class TrayApp:
             ),
             pystray.MenuItem("Verarbeitete Dateien …", self._show_log_window),
             pystray.MenuItem("Mini-Status", self._show_mini_status),
-            pystray.MenuItem("Einstellungen", self._open_settings),
+            pystray.MenuItem("Einstellungen", self._open_settings, default=True),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Über Scan Watcher", self._show_about),
             pystray.MenuItem("☕ Scan Watcher unterstützen", self._open_kofi),
