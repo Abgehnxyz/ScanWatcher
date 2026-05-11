@@ -1,7 +1,7 @@
 """
 @file    main.py
 @project Scan Watcher
-@company Nova Network GmbH
+@company Nova Network
 @date    Mai 2026
 @brief   Haupteinstiegspunkt – Single-Instance-Schutz, Logging, First-Run-Setup.
 """
@@ -14,7 +14,7 @@ import traceback
 
 from . import config, telemetry
 
-APP_VERSION = "1.0.10"
+APP_VERSION = "1.0.11"
 
 
 def _ensure_single_instance():
