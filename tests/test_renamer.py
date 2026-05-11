@@ -116,9 +116,20 @@ def test_extract_date_month_name():
 
 # ----------------------------------------------------------- _extract_sender()
 
+def test_extract_sender_volksbank_mit_ort():
+    text = "Volksbank Freiburg eG\nIhr Anschreiben vom 06.05.2026"
+    assert _extract_sender(text) == "Volksbank-Freiburg-eG"
+
+
+def test_extract_sender_sparkasse_mit_ort():
+    text = "Sparkasse Schwarzwald-Baar\nKontoinformation"
+    assert _extract_sender(text) == "Sparkasse-Schwarzwald-Baar"
+
+
 def test_extract_sender_kravag():
+    # Vollständige Firmenzeile wird zurückgegeben (KRAVAG-LOGISTIC Versicherungs-AG hat " ag"-Suffix)
     text = "KRAVAG-LOGISTIC Versicherungs-AG\nVoltastrasse 84"
-    assert _extract_sender(text) == "KRAVAG"
+    assert _extract_sender(text) == "KRAVAG-LOGISTIC-Versicherungs-AG"
 
 
 def test_extract_sender_landgericht():
