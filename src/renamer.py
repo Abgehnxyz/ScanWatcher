@@ -21,35 +21,76 @@ MONATE = {
     "sep": 9, "okt": 10, "nov": 11, "dez": 12,
 }
 
-BEKANNTE_ABSENDER = {
-    "kravag-logistic": "KRAVAG", "kravag": "KRAVAG",
-    "huk-coburg": "HUK-COBURG", "huk coburg": "HUK-COBURG", "huk": "HUK-COBURG",
-    "allianz": "Allianz", "hdi": "HDI", "wwk": "WWK",
-    "axa": "AXA", "zurich": "Zurich", "zuerick": "Zurich",
-    "finanzamt": "Finanzamt", "amtsgericht": "Amtsgericht",
-    "landgericht": "Landgericht", "arbeitsgericht": "Arbeitsgericht",
+# Nur Behörden/öffentliche Stellen – private Firmennamen gehören in die
+# Absender-Whitelist in den Einstellungen, nicht in den Source-Code.
+BEKANNTE_BEHOERDEN = {
+    "finanzamt": "Finanzamt",
+    "amtsgericht": "Amtsgericht",
+    "landgericht": "Landgericht",
+    "oberlandesgericht": "OLG",
+    "arbeitsgericht": "Arbeitsgericht",
+    "sozialgericht": "Sozialgericht",
     "verwaltungsgericht": "Verwaltungsgericht",
-    "drv": "DRV", "deutsche rentenversicherung": "DRV",
+    "finanzgericht": "Finanzgericht",
+    "deutsche rentenversicherung": "DRV",
+    "drv bund": "DRV",
     "bundesagentur fuer arbeit": "Bundesagentur-Arbeit",
-    "mercator": "MercatorLeasing", "inview": "inView",
-    "raiffeisenbank": "Raiffeisenbank", "sparkasse": "Sparkasse",
-    "volksbank": "Volksbank", "commerzbank": "Commerzbank",
-    "badenova": "Badenova", "dekra": "DEKRA",
-    "r+v": "RuV", "r&v": "RuV", "wuerttembergische": "Wuerttembergische",
-    "devk": "DEVK", "generali": "Generali", "ergo": "ERGO",
+    "bundesagentur für arbeit": "Bundesagentur-Arbeit",
+    "jobcenter": "Jobcenter",
+    "jugendamt": "Jugendamt",
+    "ordnungsamt": "Ordnungsamt",
+    "einwohnermeldeamt": "Einwohnermeldeamt",
+    "stadtverwaltung": "Stadtverwaltung",
+    "kreisverwaltung": "Kreisverwaltung",
+    "gemeindeverwaltung": "Gemeindeverwaltung",
 }
 
+# Unternehmens-Suffixe für heuristische Absendererkennung
+_COMPANY_SUFFIXES = [
+    " gmbh", " ag", " kg", " ohg", " gbr", " ug", " e.v.", " ev",
+    " gmbh & co", " co. kg", " mbh",
+]
+
 DOKUMENTTYPEN = {
-    "mahnung": "Mahnung", "2. erinnerung": "2-Erinnerung",
+    # Rechnungen & Zahlungen
+    "mahnung": "Mahnung", "zahlungserinnerung": "Zahlungserinnerung",
+    "2. mahnung": "2-Mahnung", "3. mahnung": "3-Mahnung",
     "erinnerung": "Erinnerung", "rechnung": "Rechnung",
-    "beitragsrechnung": "Beitragsrechnung", "bescheid": "Bescheid",
+    "beitragsrechnung": "Beitragsrechnung", "abrechnung": "Abrechnung",
+    "jahresabrechnung": "Jahresabrechnung", "kontoauszug": "Kontoauszug",
+    "quittung": "Quittung", "kostenrechnung": "Kostenrechnung",
+    # Behördliche Dokumente
+    "bescheid": "Bescheid", "steuerbescheid": "Steuerbescheid",
     "feststellungsbescheid": "Feststellungsbescheid",
-    "bescheinigung": "Bescheinigung", "kuendigung": "Kuendigung",
-    "kündigung": "Kuendigung", "ladung": "Ladung",
-    "urteil": "Urteil", "gutachten": "Gutachten",
-    "vollmacht": "Vollmacht", "vertrag": "Vertrag",
+    "bewilligungsbescheid": "Bewilligungsbescheid",
+    "ablehnungsbescheid": "Ablehnungsbescheid",
+    "bescheinigung": "Bescheinigung", "bestätigung": "Bestaetigung",
+    "bestaetigung": "Bestaetigung",
+    # Verträge & Rechtliches
+    "kündigung": "Kuendigung", "kuendigung": "Kuendigung",
+    "vertrag": "Vertrag", "nachtrag": "Vertragsnachtrag",
+    "vollmacht": "Vollmacht", "vollmachtsurkunde": "Vollmacht",
+    "urteil": "Urteil", "beschluss": "Beschluss",
+    "gutachten": "Gutachten", "ladung": "Ladung",
     "zustellungsurkunde": "Zustellungsurkunde",
     "guetetermin": "Guetetermin", "haupttermin": "Haupttermin",
+    "mahnbescheid": "Mahnbescheid", "vollstreckungsbescheid": "Vollstreckungsbescheid",
+    # Mitteilungen & Korrespondenz
+    "servicemitteilung": "Servicemitteilung",
+    "mitteilung": "Mitteilung", "information": "Information",
+    "hinweis": "Hinweis", "ankündigung": "Ankuendigung",
+    "ankuendigung": "Ankuendigung", "anschreiben": "Anschreiben",
+    "angebot": "Angebot", "auftragsbestätigung": "Auftragsbestaetigung",
+    "lieferschein": "Lieferschein",
+    # Versicherung
+    "police": "Versicherungspolice", "versicherungsschein": "Versicherungsschein",
+    "schadenmeldung": "Schadenmeldung", "schadenregulierung": "Schadenregulierung",
+    "beitragsanpassung": "Beitragsanpassung",
+    # Sonstiges
+    "antrag": "Antrag", "widerspruch": "Widerspruch",
+    "einspruch": "Einspruch", "klage": "Klage",
+    "protokoll": "Protokoll", "zeugnis": "Zeugnis",
+    "urkunde": "Urkunde",
 }
 
 
@@ -382,18 +423,40 @@ def _extract_date(text: str, original_filename: str) -> str:
 
 
 def _extract_sender(text: str, space_replacement: str = "-", custom_senders: dict | None = None) -> str:
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
     tl = text.lower()
-    # Benutzerdefinierte Absender haben Vorrang vor der eingebauten Liste
+    first_block = "\n".join(lines[:10]).lower()
+
+    # 1. Benutzerdefinierte Absender (Einstellungen) – höchste Priorität, ganzer Text
     for key, name in (custom_senders or {}).items():
         if key.lower() in tl:
             return clean(name, space_replacement)
-    for key, name in BEKANNTE_ABSENDER.items():
-        if key in tl:
+
+    # 2. Behörden – nur in den ersten 10 Zeilen suchen (nicht im Impressum/Fußzeile)
+    for key, name in BEKANNTE_BEHOERDEN.items():
+        if key in first_block:
             return clean(name, space_replacement)
-    for line in text.split("\n")[:8]:
-        line = line.strip()
-        if len(line) > 3 and line[0].isupper() and not line[0].isdigit():
-            return clean(line[:35], space_replacement)
+
+    # 3. Heuristik: Zeile mit Unternehmens-Suffix in ersten 12 Zeilen
+    for line in lines[:12]:
+        ll = line.lower()
+        if any(s in ll for s in _COMPANY_SUFFIXES) and len(line) <= 60:
+            return clean(line[:50], space_replacement)
+
+    # 4. Erste sinnvolle Großbuchstaben-Zeile (kein Datum, keine Zahl, keine
+    #    typischen Dokumentkopf-Schlüsselwörter)
+    _SKIP = {"rechnung", "datum", "betreff", "subject", "seite", "page",
+             "sehr geehrte", "hiermit", "anlage", "ihre", "unser"}
+    for line in lines[:8]:
+        if len(line) < 4 or len(line) > 55:
+            continue
+        if line[0].isdigit():
+            continue
+        if any(w in line.lower() for w in _SKIP):
+            continue
+        if line[0].isupper():
+            return clean(line[:40], space_replacement)
+
     return "Unbekannt"
 
 
