@@ -46,6 +46,7 @@ class TrayApp:
         self._watchers: list[WatcherService] = []
         self._icon: pystray.Icon | None = None
         self._heartbeat_timer: threading.Timer | None = None
+        self._main_window = None
 
     def _start_watchers(self):
         for w in self._watchers:
@@ -80,17 +81,16 @@ class TrayApp:
         menu = pystray.Menu(
             pystray.MenuItem("Scan Watcher – Nova Network", None, enabled=False),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Status", self._show_status),
+            pystray.MenuItem("Scan Watcher öffnen", self._show_main_window, default=True),
+            pystray.MenuItem("Mini-Status", self._show_mini_status),
             pystray.MenuItem(
                 "Zuletzt verarbeitet",
                 pystray.Menu(lambda: self._recent_menu_items()),
             ),
             pystray.MenuItem("Verarbeitete Dateien …", self._show_log_window),
-            pystray.MenuItem("Mini-Status", self._show_mini_status),
-            pystray.MenuItem("Einstellungen", self._open_settings, default=True),
+            pystray.MenuItem("Einstellungen", self._open_settings),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Über Scan Watcher", self._show_about),
-            pystray.MenuItem("☕ Scan Watcher unterstützen", self._open_kofi),
+            pystray.MenuItem("☕ Unterstützen", self._open_kofi),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Beenden", self._quit),
         )
@@ -123,19 +123,6 @@ class TrayApp:
     def _update_icon(self):
         if self._icon:
             self._icon.icon = create_icon_image(self._any_running())
-
-    def _show_status(self, icon, item):
-        count = get_session_count()
-        running = sum(1 for w in self._watchers if w.is_running())
-        profiles = self.cfg.get("folder_profiles", [])
-        lines = f"Umbenannt (Session): {count} Datei(en)\n"
-        lines += f"Aktive Watcher:      {running} / {len(profiles)}\n"
-        for p in profiles:
-            src = p.get("source", "(nicht gesetzt)")
-            tgt = p.get("target", "") or "(im Eingangsordner)"
-            name = p.get("name", "Profil")
-            lines += f"\n{name}:\n  Quelle: {src}\n  Ziel:   {tgt}"
-        self._tk_messagebox("Scan Watcher – Status", lines)
 
     def _open_settings(self, icon=None, item=None):
         def run_dialog():
@@ -299,66 +286,210 @@ class TrayApp:
         self.cfg["last_motd_id"] = motd_id
         config.save(self.cfg)
 
-    def _show_about(self, icon=None, item=None):
+    def _show_main_window(self, icon=None, item=None):
+        # Nur ein Fenster gleichzeitig
+        if self._main_window is not None:
+            try:
+                self._main_window.focus_force()
+                self._main_window.lift()
+                return
+            except Exception:
+                self._main_window = None
+
         def run():
             import customtkinter as ctk
             import webbrowser
+            from PIL import ImageTk
+
             root = ctk.CTk()
-            root.title("Über Scan Watcher")
-            root.geometry("380x300")
+            self._main_window = root
+            root.title("Scan Watcher")
+            root.geometry("520x500")
             root.resizable(False, False)
             root.configure(fg_color="#141420")
-            root.attributes("-topmost", True)
 
+            def on_close():
+                self._main_window = None
+                root.destroy()
+
+            root.protocol("WM_DELETE_WINDOW", on_close)
+
+            # ── Header ──────────────────────────────────────────────
             icon_path = Path(__file__).parent.parent / "assets" / "icon.png"
+            header = ctk.CTkFrame(root, fg_color="#1a1a2e", corner_radius=0)
+            header.pack(fill="x")
+
             if icon_path.exists():
                 try:
-                    from PIL import ImageTk
-                    img = ImageTk.PhotoImage(
-                        file=str(icon_path), master=root
+                    img_hdr = ImageTk.PhotoImage(
+                        Image.open(icon_path).resize((40, 40)), master=root
                     )
-                    ctk.CTkLabel(root, image=img, text="").pack(pady=(18, 4))
-                    root._img_ref = img
+                    ctk.CTkLabel(header, image=img_hdr, text="").pack(
+                        side="left", padx=(16, 8), pady=10
+                    )
+                    root._img_hdr = img_hdr
                 except Exception:
                     pass
 
+            title_col = ctk.CTkFrame(header, fg_color="transparent")
+            title_col.pack(side="left", pady=10)
             ctk.CTkLabel(
-                root, text=f"Scan Watcher  v{self.version}",
+                title_col, text="Scan Watcher",
                 font=ctk.CTkFont(size=16, weight="bold"),
-            ).pack(pady=(4, 2))
+            ).pack(anchor="w")
             ctk.CTkLabel(
-                root, text="Nova Network  |  Lizenz: MIT",
-                font=ctk.CTkFont(size=11), text_color="#888",
+                title_col, text=f"v{self.version}  |  Nova Network",
+                font=ctk.CTkFont(size=10), text_color="#888",
+            ).pack(anchor="w")
+
+            dot_frame = ctk.CTkFrame(header, fg_color="transparent")
+            dot_frame.pack(side="right", padx=20)
+            status_dot = ctk.CTkLabel(dot_frame, text="●", font=ctk.CTkFont(size=20))
+            status_dot.pack()
+            status_txt = ctk.CTkLabel(
+                dot_frame, text="", font=ctk.CTkFont(size=9), text_color="#888"
+            )
+            status_txt.pack()
+
+            # ── Tabs ────────────────────────────────────────────────
+            tabs = ctk.CTkTabview(
+                root, fg_color="#141420",
+                segmented_button_fg_color="#1e1e2e",
+                segmented_button_selected_color="#2d5a8e",
+                segmented_button_selected_hover_color="#3a6fa8",
+            )
+            tabs.pack(fill="both", expand=True, padx=0, pady=0)
+
+            # ── Tab: Übersicht ───────────────────────────────────────
+            tab_ov = tabs.add("Übersicht")
+
+            count_lbl = ctk.CTkLabel(
+                tab_ov, text="0", font=ctk.CTkFont(size=36, weight="bold")
+            )
+            count_lbl.pack(pady=(18, 0))
+            ctk.CTkLabel(
+                tab_ov, text="Dateien umbenannt (Session)",
+                font=ctk.CTkFont(size=10), text_color="#888",
             ).pack()
 
-            sep = ctk.CTkFrame(root, height=1, fg_color="#2a2a3a")
-            sep.pack(fill="x", padx=24, pady=12)
+            ctk.CTkFrame(tab_ov, height=1, fg_color="#2a2a3a").pack(
+                fill="x", padx=24, pady=10
+            )
 
-            btn_row = ctk.CTkFrame(root, fg_color="transparent")
-            btn_row.pack(padx=24, pady=(0, 8))
+            ctk.CTkLabel(
+                tab_ov, text="Zuletzt verarbeitet",
+                font=ctk.CTkFont(size=11, weight="bold"), anchor="w",
+            ).pack(fill="x", padx=24)
+
+            recent_box = ctk.CTkFrame(tab_ov, fg_color="#1e1e2e", corner_radius=6)
+            recent_box.pack(fill="x", padx=24, pady=(4, 12))
+            recent_labels = []
+            for _ in range(5):
+                lbl = ctk.CTkLabel(
+                    recent_box, text="", anchor="w",
+                    font=ctk.CTkFont(size=10, family="Courier New"),
+                    text_color="#4488cc",
+                )
+                lbl.pack(fill="x", padx=10, pady=2)
+                recent_labels.append(lbl)
 
             ctk.CTkButton(
-                btn_row, text="GitHub", width=110, height=32,
+                tab_ov, text="Verarbeitete Dateien …", height=30,
+                fg_color="transparent", border_width=1, border_color="#333",
+                font=ctk.CTkFont(size=10),
+                command=lambda: self._show_log_window(),
+            ).pack(pady=(0, 8))
+
+            # ── Tab: Einstellungen ───────────────────────────────────
+            tab_set = tabs.add("Einstellungen")
+            ctk.CTkLabel(
+                tab_set, text="Konfiguration",
+                font=ctk.CTkFont(size=14, weight="bold"),
+            ).pack(pady=(40, 8))
+            ctk.CTkLabel(
+                tab_set,
+                text="Überwachte Ordner, KI-Modell, Benennungsschema,\nAutostart und weitere Optionen.",
+                font=ctk.CTkFont(size=11), text_color="#888", justify="center",
+            ).pack(pady=(0, 24))
+            ctk.CTkButton(
+                tab_set, text="Einstellungen öffnen", width=220, height=42,
+                command=lambda: self._open_settings(),
+            ).pack()
+
+            # ── Tab: Unterstützen ────────────────────────────────────
+            tab_sup = tabs.add("Unterstützen")
+            ctk.CTkLabel(
+                tab_sup, text="☕  Scan Watcher unterstützen",
+                font=ctk.CTkFont(size=14, weight="bold"),
+            ).pack(pady=(40, 8))
+            ctk.CTkLabel(
+                tab_sup,
+                text="Scan Watcher ist kostenlos und Open Source.\nWenn dir das Tool hilft, freue ich mich über einen Kaffee!",
+                font=ctk.CTkFont(size=11), text_color="#aaa", justify="center",
+            ).pack(pady=(0, 24))
+            ctk.CTkButton(
+                tab_sup, text="☕  Ko-fi unterstützen", width=220, height=42,
+                fg_color="#29abe0", hover_color="#1a8fbf",
+                command=lambda: webbrowser.open("https://ko-fi.com/novanetwork"),
+            ).pack(pady=(0, 10))
+            ctk.CTkButton(
+                tab_sup, text="GitHub – Quellcode", width=220, height=36,
                 fg_color="transparent", border_width=1, border_color="#444",
                 command=lambda: webbrowser.open(
-                    "https://github.com/Abgehnxyz/ScanWatcher"),
-            ).pack(side="left", padx=(0, 8))
+                    "https://github.com/Abgehnxyz/ScanWatcher"
+                ),
+            ).pack()
 
-            ctk.CTkButton(
-                btn_row, text="☕ Ko-fi", width=120, height=32,
-                fg_color="#29abe0", hover_color="#1a8fbf",
-                command=lambda: webbrowser.open(
-                    "https://ko-fi.com/novanetwork"),
-            ).pack(side="left")
+            # ── Tab: Über ────────────────────────────────────────────
+            tab_about = tabs.add("Über")
+            if icon_path.exists():
+                try:
+                    img_big = ImageTk.PhotoImage(
+                        Image.open(icon_path).resize((72, 72)), master=root
+                    )
+                    ctk.CTkLabel(tab_about, image=img_big, text="").pack(pady=(24, 6))
+                    root._img_big = img_big
+                except Exception:
+                    pass
+            ctk.CTkLabel(
+                tab_about, text=f"Scan Watcher  v{self.version}",
+                font=ctk.CTkFont(size=15, weight="bold"),
+            ).pack()
+            ctk.CTkLabel(
+                tab_about, text="Nova Network  |  Lizenz: MIT  |  2026",
+                font=ctk.CTkFont(size=10), text_color="#888",
+            ).pack(pady=(4, 0))
+            ctk.CTkLabel(
+                tab_about,
+                text="Automatische OCR-Umbenennung für Windows-Scan-Ordner.\nDokumente werden erkannt, sinnvoll benannt und archiviert.",
+                font=ctk.CTkFont(size=11), text_color="#aaa", justify="center",
+            ).pack(pady=(14, 0))
 
-            ctk.CTkButton(
-                root, text="Schließen", width=100, height=32,
-                command=root.destroy,
-            ).pack(pady=(4, 16))
+            # ── Refresh-Schleife ─────────────────────────────────────
+            def refresh():
+                running = self._any_running()
+                status_dot.configure(
+                    text_color="#22c55e" if running else "#ef4444"
+                )
+                status_txt.configure(text="Aktiv" if running else "Gestoppt")
+                count_lbl.configure(text=str(get_session_count()))
+                recent = get_recent_files()
+                for i, lbl in enumerate(recent_labels):
+                    lbl.configure(text=recent[i] if i < len(recent) else "")
+                try:
+                    root.after(2000, refresh)
+                except Exception:
+                    pass
 
+            refresh()
             root.mainloop()
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _show_about(self, icon=None, item=None):
+        self._show_main_window()
+
+
 
     def _open_kofi(self, icon=None, item=None):
         import webbrowser
