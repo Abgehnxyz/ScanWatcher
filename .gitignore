@@ -16,3 +16,7 @@ venv/
 
 # Konfiguration (kann API-Keys oder lokale Pfade enthalten)
 config.json
+
+# Interne Notizen – nicht für die Öffentlichkeit
+AbgehnOps_Integration.md
+Kofi.md

@@ -962,18 +962,29 @@ def _extract_sender(text: str, space_replacement: str = "-", custom_senders: dic
         if key in first_30:
             return clean(name, space_replacement)
 
-    # 3. Bekannte Marken/Branchen – erste 30 Zeilen.
-    #    Gibt die vollständige Zeile zurück (z.B. "Volksbank Freiburg eG"),
-    #    nicht nur den kanonischen Kurznamen.
+    # 3. Bekannte Marken/Branchen – erst in den ersten 30 Zeilen (Briefkopf),
+    #    dann Fallback auf den gesamten Text (Brieffuß, Impressum, OCR-Reihung).
     for key, canonical in BEKANNTE_BRANCHEN.items():
         if key in first_30:
             # Zeile finden, die den Begriff enthält
             for line in lines[:30]:
                 ll = line.lower()
-                if key in ll and 3 < len(line) <= 80:
-                    cleaned = clean(line[:70], space_replacement)
-                    # Leere Ergebnisse abfangen (z.B. rein symbolische Zeile)
+                if key in ll and 3 < len(line) <= 120:
+                    # Enthält die Zeile Adressdaten (PLZ, Postfach, Straße…)?
+                    # Dann nur den kanonischen Kurznamen zurückgeben, nicht die
+                    # ganze Adresszeile ("Volksbank Freiburg eG . Postfach 540 . 79005 Freiburg")
+                    if _RE_ADDRESS.search(line):
+                        return clean(canonical, space_replacement)
+                    cleaned = clean(line[:80], space_replacement)
                     return cleaned if cleaned else clean(canonical, space_replacement)
+            return clean(canonical, space_replacement)
+
+    # 3b. Fallback: BEKANNTE_BRANCHEN im gesamten Text.
+    #     Greift z.B. wenn der Briefkopf als Bild eingebettet ist (pdfplumber
+    #     liest dann nur den Textteil ab Zeile 30+) oder wenn der Firmenname
+    #     nur im Brieffuß steht. Gibt immer den kanonischen Kurznamen zurück.
+    for key, canonical in BEKANNTE_BRANCHEN.items():
+        if key in tl:
             return clean(canonical, space_replacement)
 
     # 4. Heuristik: Zeile mit Unternehmens-Suffix in ersten 30 Zeilen

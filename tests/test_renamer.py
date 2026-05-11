@@ -116,14 +116,31 @@ def test_extract_date_month_name():
 
 # ----------------------------------------------------------- _extract_sender()
 
-def test_extract_sender_volksbank_mit_ort():
-    text = "Volksbank Freiburg eG\nIhr Anschreiben vom 06.05.2026"
-    assert _extract_sender(text) == "Volksbank-Freiburg-eG"
+def test_extract_sender_volksbank_clean_line():
+    # Firmenname ohne Adressdaten → vollständige Zeile wird verwendet
+    text = "Volksbank Musterstadt eG\nIhr Anschreiben vom 01.01.2026"
+    assert _extract_sender(text) == "Volksbank-Musterstadt-eG"
 
 
-def test_extract_sender_sparkasse_mit_ort():
-    text = "Sparkasse Schwarzwald-Baar\nKontoinformation"
-    assert _extract_sender(text) == "Sparkasse-Schwarzwald-Baar"
+def test_extract_sender_volksbank_adresszeile():
+    # Zeile mit Firmenname + Adressdaten → Adressfilter greift → kanonischer Kurzname
+    text = "Volksbank Musterstadt eG . Postfach 100 . 12345 Musterstadt\nSehr geehrte Damen"
+    assert _extract_sender(text) == "Volksbank"
+
+
+def test_extract_sender_volksbank_im_fussbereich():
+    # Briefkopf als eingebettetes Bild → pdfplumber liest ihn nicht.
+    # Firmenname erscheint erst im Brieffuß nach Zeile 30.
+    body = "\n".join([f"Zeile {i}" for i in range(35)])
+    footer = "\nVolksbank Musterstadt eG | Musterstraße 1 | 12345 Musterstadt"
+    text = body + footer
+    assert _extract_sender(text) == "Volksbank"
+
+
+def test_extract_sender_sparkasse_clean_line():
+    # Sparkasse ohne Adressdaten → vollständige Zeile
+    text = "Sparkasse Musterregion\nKontoinformation"
+    assert _extract_sender(text) == "Sparkasse-Musterregion"
 
 
 def test_extract_sender_kravag():

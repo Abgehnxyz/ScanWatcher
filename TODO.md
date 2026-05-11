@@ -33,8 +33,8 @@
   - `rename` – Erfolg/Misserfolg, genutztes Modell, Dateianzahl
   - `heartbeat` – wöchentlich: aktive Installation, Version
   - `uninstall` – via Inno Setup Deinstallations-Hook ✓
-- [x] Endpoint: `https://ops.abgehn.xyz/api/scanwatcher/event` (POST, JSON)
-- [x] Dashboard in **Abgehn Ops** (abgehn.xyz): Aktive Installationen, Umbenennungen gesamt, Modell-Nutzung, Version-Verteilung
+- [x] Telemetrie-Backend (anonyme REST-API, POST JSON)
+- [x] Internes Dashboard: Aktive Installationen, Umbenennungen gesamt, Modell-Nutzung, Version-Verteilung
 - [x] Lokale Opt-out-Möglichkeit: Toggle "Anonyme Nutzungsstatistiken senden" in Einstellungen
 
 ---
@@ -72,7 +72,7 @@
 - [x] Update-Kanal wählbar: `stable` (default) / `beta` (GitHub Pre-Releases)
 - [x] Update-Check deaktivierbar in Einstellungen (Toggle „Automatisch auf Updates prüfen")
 - [x] Changelog der neuen Version im Benachrichtigungs-Dialog anzeigen (aus GitHub Release-Body)
-- [x] Server-seitiger „Message of the Day"-Endpoint (ops.abgehn.xyz): einmalige Meldungen schieben
+- [x] Server-seitiger „Message of the Day"-Endpoint: einmalige Meldungen schieben
   - Technischer Hinweis, kritischer Bugfix-Alert, neue Feature-Ankündigung
   - Nachricht nur einmalig zeigen (gespeicherte `last_motd_id` in config)
 
