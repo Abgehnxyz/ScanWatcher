@@ -58,7 +58,7 @@ Type: files; Name: "{app}\*.log"
 
 [UninstallRun]
 Filename: "powershell.exe"; \
-  Parameters: "-NonInteractive -WindowStyle Hidden -Command ""$id = Get-Content -ErrorAction SilentlyContinue -Path ([IO.Path]::Combine($env:APPDATA,'ScanWatcher','install_id')); if ($id) { Invoke-RestMethod -Method Post -Uri 'https://ops.abgehn.xyz/api/scanwatcher/event' -ContentType 'application/json' -Body ('{""install_id"":""' + $id.Trim() + '"",""event"":""uninstall""}') -ErrorAction SilentlyContinue }"""; \
+  Parameters: "-NonInteractive -WindowStyle Hidden -Command ""$id = Get-Content -ErrorAction SilentlyContinue -Path ([IO.Path]::Combine($env:APPDATA,'ScanWatcher','install_id')); if ($id) {{ Invoke-RestMethod -Method Post -Uri 'https://ops.abgehn.xyz/api/scanwatcher/event' -ContentType 'application/json' -Body ('{{""install_id"":""' + $id.Trim() + '"",""event"":""uninstall""}}') -ErrorAction SilentlyContinue }}"""; \
   Flags: runhidden
 
 [Run]
