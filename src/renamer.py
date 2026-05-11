@@ -49,7 +49,20 @@ BEKANNTE_BEHOERDEN = {
 _COMPANY_SUFFIXES = [
     " gmbh", " ag", " kg", " ohg", " gbr", " ug", " e.v.", " ev",
     " gmbh & co", " co. kg", " mbh",
+    " eg", " e.g.",           # Genossenschaften (Volksbank, Raiffeisenbank …)
+    " kag", " stiftung",
 ]
+
+# Regex für Adress- und Empfängerzeilen – werden im Fallback übersprungen
+_RE_ADDRESS = re.compile(
+    r"\b\d{5}\b"                               # PLZ
+    r"|str\.\s|straße\b|strasse\b"             # Straßentypen
+    r"|\bweg\b|\bplatz\b|\bgasse\b|\ballee\b"
+    r"|\bpostfach\b"
+    r"|\btel\.?\b|\bfax\.?\b|\bwww\.\b|\b@\b"  # Kontaktdaten
+    r"|\bsepa\b|\biban\b|\bbic\b",              # Bankdaten-Zeilen
+    re.IGNORECASE,
+)
 
 DOKUMENTTYPEN = {
     # Rechnungen & Zahlungen
@@ -443,19 +456,22 @@ def _extract_sender(text: str, space_replacement: str = "-", custom_senders: dic
         if any(s in ll for s in _COMPANY_SUFFIXES) and len(line) <= 60:
             return clean(line[:50], space_replacement)
 
-    # 4. Erste sinnvolle Großbuchstaben-Zeile (kein Datum, keine Zahl, keine
-    #    typischen Dokumentkopf-Schlüsselwörter)
+    # 4. Erste sinnvolle Großbuchstaben-Zeile – Adress- und Empfängerzeilen
+    #    werden herausgefiltert, damit nicht der Kundenname als Absender landet.
     _SKIP = {"rechnung", "datum", "betreff", "subject", "seite", "page",
-             "sehr geehrte", "hiermit", "anlage", "ihre", "unser"}
-    for line in lines[:8]:
-        if len(line) < 4 or len(line) > 55:
+             "sehr geehrte", "hiermit", "anlage", "ihre", "unser",
+             "herr", "frau", "herrn"}
+    for line in lines[:15]:
+        if len(line) < 4 or len(line) > 60:
             continue
         if line[0].isdigit():
             continue
         if any(w in line.lower() for w in _SKIP):
             continue
+        if _RE_ADDRESS.search(line):
+            continue
         if line[0].isupper():
-            return clean(line[:40], space_replacement)
+            return clean(line[:45], space_replacement)
 
     return "Unbekannt"
 
