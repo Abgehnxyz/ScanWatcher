@@ -179,6 +179,22 @@ class SettingsDialog(ctk.CTkToplevel):
         )
         self._om_update_channel.pack(side="right")
 
+        row_now = ctk.CTkFrame(main, fg_color="transparent")
+        row_now.pack(fill="x", pady=(8, 0))
+        self._btn_check_now = ctk.CTkButton(
+            row_now,
+            text="Jetzt auf Updates prüfen",
+            width=220,
+            height=32,
+            command=self._check_update_now,
+        )
+        self._btn_check_now.pack(side="left")
+        self._lbl_check_result = ctk.CTkLabel(
+            row_now, text="", font=ctk.CTkFont(size=11),
+            anchor="w", text_color="#a0a0b0",
+        )
+        self._lbl_check_result.pack(side="left", padx=(12, 0))
+
         ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
 
         self._var_telemetry = tk.BooleanVar(value=self.cfg.get("telemetry_enabled", False))
@@ -799,6 +815,53 @@ class SettingsDialog(ctk.CTkToplevel):
         kw = {"show": show} if show else {}
         ctk.CTkEntry(parent, textvariable=var, height=36, **kw).pack(fill="x", pady=(0, 10))
         setattr(self, f"_var_{key}", var)
+
+    def _check_update_now(self):
+        from . import updater
+        self._btn_check_now.configure(state="disabled", text="Prüfe…")
+        self._lbl_check_result.configure(text="")
+        channel = "beta" if self._om_update_channel.get().startswith("Beta") else "stable"
+
+        def on_update(release: dict):
+            tag = release.get("tag_name", "?")
+            self.after(0, lambda: [
+                self._btn_check_now.configure(state="normal", text="Jetzt auf Updates prüfen"),
+                self._lbl_check_result.configure(text="", text_color="#a0a0b0"),
+                messagebox.showinfo(
+                    "Update verfügbar",
+                    f"Version {tag} ist verfügbar!\n\nBitte starte Scan Watcher neu – der Update-Dialog erscheint dann automatisch.",
+                    parent=self,
+                ),
+            ])
+
+        def _run():
+            import urllib.request, json
+            _API = ("https://api.github.com/repos/Abgehnxyz/ScanWatcher/releases"
+                    if channel == "beta"
+                    else "https://api.github.com/repos/Abgehnxyz/ScanWatcher/releases/latest")
+            _HEADERS = {"Accept": "application/vnd.github+json", "User-Agent": "ScanWatcher"}
+            try:
+                req = urllib.request.Request(_API, headers=_HEADERS)
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                release = data[0] if channel == "beta" else data
+                tag = release.get("tag_name", "")
+                from . import updater as _u
+                if tag and _u._parse_version(tag) > _u._parse_version(self.version):
+                    on_update(release)
+                else:
+                    self.after(0, lambda: [
+                        self._btn_check_now.configure(state="normal", text="Jetzt auf Updates prüfen"),
+                        self._lbl_check_result.configure(text=f"✓ Aktuell ({self.version})", text_color="#4caf50"),
+                    ])
+            except Exception as e:
+                self.after(0, lambda: [
+                    self._btn_check_now.configure(state="normal", text="Jetzt auf Updates prüfen"),
+                    self._lbl_check_result.configure(text="Verbindungsfehler", text_color="#f44336"),
+                ])
+
+        import threading
+        threading.Thread(target=_run, daemon=True).start()
 
     def _toggle_row(self, parent: ctk.CTkFrame, label: str, var: tk.BooleanVar):
         row = ctk.CTkFrame(parent, fg_color="#1e1e2e", corner_radius=8)
