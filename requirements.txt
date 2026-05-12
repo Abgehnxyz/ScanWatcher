@@ -1,0 +1,10 @@
+customtkinter>=5.2.0
+watchdog>=4.0.0
+pdfplumber>=0.11.0
+pymupdf>=1.24.0
+pytesseract>=0.3.13
+Pillow>=10.0.0
+pystray>=0.19.5
+anthropic>=0.25.0
+keyring>=25.0.0
+pyinstaller>=6.0.0

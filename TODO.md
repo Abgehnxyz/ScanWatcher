@@ -1,0 +1,151 @@
+# Scan Watcher – Feature-Roadmap & TODO
+
+> Ziel: Professionelles Freeware-Tool für Windows, das Scan-Ordner überwacht,
+> Dokumente per OCR erkennt und intelligent umbenennt.
+> Veröffentlichung auf GitHub (public), Unterstützung via Ko-fi.
+
+---
+
+## 🔥 Hohe Priorität
+
+### Benennungsschema konfigurierbar machen
+- [x] Freies Format-Template im Einstellungs-Dialog (z. B. `{DATUM}_{ABSENDER}_{BETREFF}`)
+  - Tokens: `{DATUM}`, `{JAHR}`, `{MONAT}`, `{TAG}`, `{ABSENDER}`, `{BETREFF}`, `{ORIGINAL}`, `{ZAEHLER}`
+  - Datumsformat frei wählbar: `YYYY-MM-DD`, `DD.MM.YYYY`, `YYYYMMDD`
+  - Live-Vorschau im Dialog mit Beispiel-Output
+- [x] Zeichenersatz-Regeln konfigurierbar (z. B. Leerzeichen → `_` oder `-`)
+- [x] Prefix/Suffix frei definierbar (über Template, z. B. `SCAN_{DATUM}_{ABSENDER}_{BETREFF}`)
+
+### KI-Modelle erweitern
+- [x] **OpenAI GPT-4o-mini** – günstig, gute DE-Unterstützung
+- [x] **Google Gemini Flash** – kostenloser Tier verfügbar
+- [x] **Mistral API** – europäischer Anbieter (DSGVO-freundlicher)
+- [x] **Groq API** – sehr schnell, kostenloser Tier
+- [x] Jedes Modell im Dialog mit Infotext, Link zur API-Key-Seite und Preis-Hinweis
+- [x] API-Key pro Modell separat im Credential Manager
+- [x] Modell-Auswahl: Dropdown "Aktives Modell" (keines / Claude / GPT / Gemini / Groq / Ollama)
+
+### Telemetrie / Usage-Tracking (DSGVO-konform)
+- [x] **Opt-in** beim ersten Start (explizite Zustimmung, ablösbar in Einstellungen)
+- [x] Anonyme Installation-ID (UUID, kein Personenbezug)
+- [x] Gemeldete Ereignisse:
+  - `install` – Version, Windows-Build (kein Hostname, kein Username)
+  - `rename` – Erfolg/Misserfolg, genutztes Modell, Dateianzahl
+  - `heartbeat` – wöchentlich: aktive Installation, Version
+  - `uninstall` – via Inno Setup Deinstallations-Hook ✓
+- [x] Telemetrie-Backend (anonyme REST-API, POST JSON)
+- [x] Internes Dashboard: Aktive Installationen, Umbenennungen gesamt, Modell-Nutzung, Version-Verteilung
+- [x] Lokale Opt-out-Möglichkeit: Toggle "Anonyme Nutzungsstatistiken senden" in Einstellungen
+
+---
+
+## 🟡 Mittlere Priorität
+
+### Einstellungs-Dialog verbessern
+- [x] **Absender-Whitelist** editierbar: Eigene Einträge hinzufügen/entfernen (gespeichert in config.json)
+- [x] **Dokumenttypen** editierbar: Eigene Begriffe → Anzeigename
+- [x] **Ordner-Profil** wechseln: mehrere Ordner-Paare (Quelle → Ziel) verwalten
+- [x] Einstellungen Export/Import als `.json`
+- [x] Verarbeitete Dateien in der App-Oberfläche anzeigen (einfache Log-Liste)
+
+### Watcher-Konfiguration
+- [x] **Dateitypen** erweiterbar: neben `.pdf` auch `.jpg`, `.tiff`, `.png` (Bild-OCR)
+- [x] **Namensmuster** konfigurierbar: aktuell nur rein numerisch; freies Regex möglich machen
+- [x] **OCR-Seitenzahl** in Einstellungen: wie viele Seiten sollen gelesen werden (Standard: 2)
+- [x] **Stabilitäts-Timeout** in Einstellungen: wie lange auf stabile Dateigröße warten (Standard: 30s)
+- [x] Duplikat-Strategie wählbar: `_2`-Suffix / Datum anhängen / überschreiben
+
+### UI / UX
+- [x] **Dark/Light-Mode** Umschalter (customtkinter unterstützt beides)
+- [ ] **Sprache**: Englisch als zweite UI-Sprache (i18n-Vorbereitung)
+- [x] **System-Tray**: Letzten 5 umbenannten Dateien im Kontextmenü anzeigen
+- [x] **Mini-Statusfenster**: optional einblendbares kleines Fenster (immer im Vordergrund)
+- [x] Update-Check: Beim Start prüfen ob neue Version auf GitHub verfügbar (GitHub Releases API)
+
+### Updater
+- [x] Beim Start via GitHub Releases API prüfen ob neue Version verfügbar (`GET /repos/…/releases/latest`)
+- [x] Bei verfügbarem Update: Tray-Benachrichtigung + optionaler Hinweis-Banner in der App
+- [x] **In-App-Updater**: EXE/Installer-Download im Hintergrund, dann Neustart mit neuem Installer
+  - Installer-URL aus GitHub Release-Asset automatisch ermitteln
+  - Download-Fortschritt anzeigen (Progressbalken im Update-Dialog)
+  - Vor Installation: Hash-Prüfung (SHA256 aus Release-Assets)
+- [x] Update-Kanal wählbar: `stable` (default) / `beta` (GitHub Pre-Releases)
+- [x] Update-Check deaktivierbar in Einstellungen (Toggle „Automatisch auf Updates prüfen")
+- [x] Changelog der neuen Version im Benachrichtigungs-Dialog anzeigen (aus GitHub Release-Body)
+- [x] Server-seitiger „Message of the Day"-Endpoint: einmalige Meldungen schieben
+  - Technischer Hinweis, kritischer Bugfix-Alert, neue Feature-Ankündigung
+  - Nachricht nur einmalig zeigen (gespeicherte `last_motd_id` in config)
+
+### Ko-fi-Integration
+- [x] Ko-fi-Link im Tray-Kontextmenü „☕ Scan Watcher unterstützen"
+- [x] Ko-fi-Button im About-Dialog
+- [x] Ko-fi-Link in README.md und Installer-Begrüßung
+- [x] Ko-fi-Username festlegen und URL in Code aktualisieren (`ko-fi.com/novanetwork`)
+
+---
+
+## 🟢 Niedrige Priorität / Langfristig
+
+### Release & Community
+- [x] **GitHub Releases** mit automatisch generiertem Changelog aus Commit-Präfixen
+- [x] **Ko-fi-Hinweis** im About-Dialog und im Installer-Begrüßungstext
+- [x] **About-Dialog** im Tray-Menü: Version, Lizenz (MIT), Links (GitHub, Ko-fi, Nova Network)
+- [x] **README.md** erweitern: Screenshots, GIF-Demo, Installations-Anleitung, Feature-Matrix
+- [x] GitHub Actions: Automatischer Build + Release bei Tag-Push
+
+### OCR-Qualität
+- [x] **Vorverarbeitung**: Kontrast/Schärfe-Filter vor Tesseract (verbessert Erkennung bei schwachen Scans)
+- [ ] Zusätzliche Tesseract-Sprachen optional nachladen
+- [x] **pdfplumber** Fallback verbessern: Tabellenstruktur für Rechnungen auswerten
+- [x] Konfidenz-Score: wenn OCR unter Schwellenwert, Datei als "PRÜFEN_" prefixen
+
+### Sicherheit & Robustheit
+- [x] Watched-Folder Lese-/Schreibrechte beim Start prüfen, Fehler klar melden
+- [x] `UNLESBAR_`-Dateien separat in eigenem Unterordner ablegen (konfigurierbar)
+- [x] Crash-Report: Bei unbehandelten Exceptions lokale Datei (crash.log im AppData-Ordner)
+
+---
+
+## 🔧 Technische Schulden
+
+- [x] Unit-Tests für `_via_ollama()` und `_via_claude()` (Mock-HTTP)
+- [x] Unit-Tests für Benennungsschema-Templates (wenn implementiert)
+- [x] `build.bat` auf `py` statt `python` umstellen (Windows-Kompatibilität)
+- [x] Installer: Tesseract optional mitbündeln oder separaten Download-Link anbieten
+- [x] `config.json` Schema-Version für Migration bei Breaking Changes
+
+---
+
+## 📊 Abgehn Ops – Telemetrie-Dashboard (Planung)
+
+> Backend: Express + MySQL (bereits vorhanden in abgehn.xyz/ops)
+
+### Neue DB-Tabelle: `scanwatcher_events`
+```sql
+CREATE TABLE scanwatcher_events (
+  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+  install_id   CHAR(36) NOT NULL,          -- UUID, anonym
+  event        VARCHAR(32) NOT NULL,       -- install, rename, heartbeat, uninstall
+  version      VARCHAR(16),
+  win_build    VARCHAR(16),
+  model_used   VARCHAR(32),               -- claude / ollama / rules / gpt / none
+  rename_ok    TINYINT(1),
+  files_total  INT,
+  created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (install_id),
+  INDEX (event),
+  INDEX (created_at)
+);
+```
+
+### Neue Route: `POST /api/scanwatcher/event` (öffentlich, kein Auth)
+- Rate-Limit: max. 10 Events/Stunde pro install_id
+- Input-Validierung: event-Typ Whitelist, keine freien Strings
+- Kein IP-Logging
+
+### Dashboard-Seite `/scanwatcher` in Abgehn Ops
+- Aktive Installationen (Heartbeat letzte 7 Tage)
+- Umbenennungen gesamt / pro Modell (Pie-Chart)
+- Versions-Verteilung (Bar-Chart)
+- Tages-Aktivität (Line-Chart)
+- Neue Installationen pro Woche

@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+*.pyo
+dist/ScanWatcher/
+dist/installer/
+dist2/
+build/
+*.spec
+.venv/
+venv/
+*.log
+*.egg-info/
+.pytest_cache/
+.idea/
+.vscode/
+
+# Konfiguration (kann API-Keys oder lokale Pfade enthalten)
+config.json
+
+# Interne Notizen – nicht für die Öffentlichkeit
+AbgehnOps_Integration.md
+Kofi.md

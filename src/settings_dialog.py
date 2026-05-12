@@ -1,0 +1,943 @@
+"""
+@file    settings_dialog.py
+@project Scan Watcher
+@company Nova Network
+@date    Mai 2026
+@brief   Einstellungs-Dialog (customtkinter, Dark-Mode) – Ordnerkonfiguration,
+         KI-Modell-Auswahl, Benennungsschema, Autostart- und Benachrichtigungs-Toggles.
+"""
+
+import tkinter as tk
+from tkinter import filedialog, messagebox
+
+import customtkinter as ctk
+
+from . import config
+
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
+_MODEL_OPTIONS = [
+    ("rules",   "Keines – Regelwerk (offline)"),
+    ("claude",  "Claude Haiku (Anthropic)"),
+    ("openai",  "GPT-4o-mini (OpenAI)"),
+    ("gemini",  "Gemini Flash (Google)"),
+    ("mistral", "Mistral Small (EU-Server)"),
+    ("groq",    "Llama 3.1 via Groq"),
+    ("ollama",  "Ollama (lokal, kein Internet)"),
+]
+_MODEL_ID      = {display: key for key, display in _MODEL_OPTIONS}
+_MODEL_DISPLAY = {key: display for key, display in _MODEL_OPTIONS}
+
+_MODEL_DETAIL = {
+    "rules": {
+        "has_key": False,
+        "info":  "Umbenennung per Regelwerk – erkennt Datum, Absender und Betreff aus dem OCR-Text.",
+        "info2": "Kein Internet, keine Kosten.",
+        "color": "#666",
+    },
+    "claude": {
+        "has_key": True,
+        "hint":    "API-Key: console.anthropic.com  |  ~$0.001/Dok. (claude-3-5-haiku)",
+        "warning": "OCR-Text wird an US-Server (Anthropic) uebermittelt.",
+        "color":   "#e07020",
+    },
+    "openai": {
+        "has_key": True,
+        "hint":    "API-Key: platform.openai.com  |  ~$0.0002/Dok. (gpt-4o-mini)",
+        "warning": "OCR-Text wird an US-Server (OpenAI) uebermittelt.",
+        "color":   "#e07020",
+    },
+    "gemini": {
+        "has_key": True,
+        "hint":    "API-Key: aistudio.google.com  |  Kostenloser Tier: 1.500 Anfragen/Tag",
+        "warning": "OCR-Text wird an US-Server (Google) uebermittelt.",
+        "color":   "#e07020",
+    },
+    "mistral": {
+        "has_key": True,
+        "hint":    "API-Key: console.mistral.ai  |  ~$0.001/Dok. – EU-Server (DSGVO-freundlich)",
+        "warning": "OCR-Text wird an EU-Server (Mistral AI, Frankreich) uebermittelt.",
+        "color":   "#4488cc",
+    },
+    "groq": {
+        "has_key": True,
+        "hint":    "API-Key: console.groq.com  |  Kostenloser Tier, sehr schnell",
+        "warning": "OCR-Text wird an US-Server (Groq) uebermittelt.",
+        "color":   "#e07020",
+    },
+    "ollama": {
+        "has_key": False,
+        "info":  "Laeuft lokal auf Port 11434 – kein Internet, keine Kosten.",
+        "info2": "Installieren: ollama.com  |  Modell laden: ollama pull llama3.2",
+        "color": "#4488cc",
+    },
+}
+
+
+class SettingsDialog(ctk.CTkToplevel):
+    def __init__(self, parent, cfg: dict, on_save=None, version: str = ""):
+        super().__init__(parent)
+        self.cfg = cfg.copy()
+        self.on_save = on_save
+        self.version = version
+        self.result = None
+
+        self.title("Scan Watcher – Einstellungen")
+        self.resizable(False, False)
+        self._build_ui()
+        self._center()
+
+    def _build_ui(self):
+        self.configure(fg_color="#141420")
+
+        # Header
+        header = ctk.CTkFrame(self, fg_color="#0a0a14", corner_radius=0, height=64)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+
+        ctk.CTkLabel(
+            header,
+            text="⚙  Scan Watcher",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color="white",
+        ).pack(side="left", padx=(20, 6))
+
+        if self.version:
+            ctk.CTkLabel(
+                header,
+                text=f"v{self.version}",
+                font=ctk.CTkFont(size=11),
+                text_color="#888",
+            ).pack(side="left", pady=(6, 0))
+
+        ctk.CTkButton(
+            header,
+            text="☕ Unterstützen",
+            font=ctk.CTkFont(size=11),
+            width=130, height=32,
+            fg_color="#29abe0", hover_color="#1a8fbf", text_color="white",
+            command=lambda: __import__("webbrowser").open("https://ko-fi.com/novanetwork"),
+        ).pack(side="right", padx=16)
+
+        main = self._make_scroll_area()
+
+        self._profiles_section(main)
+
+        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=(0, 16))
+        self._naming_section(main)
+        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+        self._model_section(main)
+        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+        self._senders_section(main)
+        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+        self._doc_types_section(main)
+        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+        self._watcher_section(main)
+        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+
+        # Toggles
+        self._var_autostart = tk.BooleanVar(value=self.cfg.get("autostart", False))
+        self._toggle_row(main, "Mit Windows automatisch starten", self._var_autostart)
+
+        self._var_notifications = tk.BooleanVar(value=self.cfg.get("notifications", True))
+        self._toggle_row(main, "Windows-Benachrichtigungen anzeigen", self._var_notifications)
+
+        self._option_row(main, "Log-Level (Protokollierung)", "log_level", ["INFO", "DEBUG", "WARNING"])
+
+        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+
+        # Telemetrie
+        ctk.CTkLabel(
+            main,
+            text="Nutzungsstatistiken",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        # Update-Einstellungen
+        ctk.CTkLabel(
+            main,
+            text="Updates",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        self._var_update_check = tk.BooleanVar(value=self.cfg.get("update_check_enabled", True))
+        self._toggle_row(main, "Automatisch auf Updates prüfen", self._var_update_check)
+
+        row_ch = ctk.CTkFrame(main, fg_color="transparent")
+        row_ch.pack(fill="x", pady=(4, 0))
+        ctk.CTkLabel(row_ch, text="Update-Kanal", font=ctk.CTkFont(size=11),
+                     anchor="w").pack(side="left")
+        self._om_update_channel = ctk.CTkOptionMenu(
+            row_ch, values=["Stabil (stable)", "Beta (pre-release)"], width=180, height=32,
+        )
+        self._om_update_channel.set(
+            "Beta (pre-release)" if self.cfg.get("update_channel") == "beta"
+            else "Stabil (stable)"
+        )
+        self._om_update_channel.pack(side="right")
+
+        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+
+        self._var_telemetry = tk.BooleanVar(value=self.cfg.get("telemetry_enabled", False))
+        row_tel = ctk.CTkFrame(main, fg_color="#1e1e2e", corner_radius=8)
+        row_tel.pack(fill="x", pady=(0, 4))
+        ctk.CTkLabel(row_tel, text="Anonyme Nutzungsstatistiken senden", anchor="w").pack(
+            side="left", padx=16, pady=12
+        )
+        ctk.CTkSwitch(
+            row_tel, text="", variable=self._var_telemetry, onvalue=True, offvalue=False, width=48
+        ).pack(side="right", padx=16)
+
+        ctk.CTkLabel(
+            main,
+            text="  Kein Personenbezug. Nur: App-Version, genutztes Modell, Erfolg/Fehler.",
+            font=ctk.CTkFont(size=10),
+            text_color="#4488cc",
+            anchor="w",
+            wraplength=460,
+        ).pack(fill="x", pady=(0, 12))
+
+        # Footer
+        footer = ctk.CTkFrame(self, fg_color="#0a0a14", corner_radius=0, height=60)
+        footer.pack(fill="x", side="bottom")
+        footer.pack_propagate(False)
+
+        ctk.CTkButton(
+            footer, text="Speichern", width=120, height=36, command=self._save,
+        ).pack(side="right", padx=(8, 20), pady=12)
+
+        ctk.CTkButton(
+            footer, text="Abbrechen", width=100, height=36,
+            fg_color="transparent", border_width=1, border_color="#444",
+            hover_color="#2a2a3a", command=self.destroy,
+        ).pack(side="right", pady=12)
+
+        ctk.CTkButton(
+            footer, text="Importieren", width=100, height=36,
+            fg_color="transparent", border_width=1, border_color="#444",
+            hover_color="#2a2a3a", command=self._import_settings,
+        ).pack(side="left", padx=(20, 4), pady=12)
+
+        ctk.CTkButton(
+            footer, text="Exportieren", width=100, height=36,
+            fg_color="transparent", border_width=1, border_color="#444",
+            hover_color="#2a2a3a", command=self._export_settings,
+        ).pack(side="left", padx=(0, 4), pady=12)
+
+    # --------------------------------------------------------- Scroll-Bereich
+
+    def _make_scroll_area(self) -> ctk.CTkFrame:
+        """Flicker-freier Scrollbereich: tk.Canvas + CTkScrollbar statt CTkScrollableFrame."""
+        container = ctk.CTkFrame(self, fg_color="transparent")
+        container.pack(fill="both", expand=True)
+
+        canvas = tk.Canvas(container, bg="#141420", highlightthickness=0, bd=0)
+        sb = ctk.CTkScrollbar(container, command=canvas.yview)
+        sb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        canvas.configure(yscrollcommand=sb.set)
+
+        inner = ctk.CTkFrame(canvas, fg_color="transparent")
+        win_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        inner.bind("<Configure>",
+                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>",
+                    lambda e: canvas.itemconfigure(win_id, width=e.width))
+
+        def _scroll(e):
+            canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
+
+        # Scroll nur aktiv solange Dialog offen
+        self.bind_all("<MouseWheel>", _scroll)
+        self.bind("<Destroy>", lambda e: self.unbind_all("<MouseWheel>"))
+
+        # Padding-Wrapper – entspricht dem früheren padx=24, pady=20
+        padded = ctk.CTkFrame(inner, fg_color="transparent")
+        padded.pack(fill="x", padx=24, pady=20)
+        return padded
+
+    # --------------------------------------------------------- Ordner-Profile
+
+    def _profiles_section(self, parent: ctk.CTkFrame):
+        ctk.CTkLabel(
+            parent,
+            text="Ordner-Profile",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        ctk.CTkLabel(
+            parent,
+            text="  Jeder Eintrag überwacht einen eigenen Eingangsordner gleichzeitig.",
+            font=ctk.CTkFont(size=10),
+            text_color="#666",
+            anchor="w",
+        ).pack(fill="x", pady=(0, 8))
+
+        self._profile_rows_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self._profile_rows_frame.pack(fill="x")
+
+        self._profile_rows: list[list] = []
+
+        for p in self.cfg.get("folder_profiles", []):
+            self._add_profile_row(p.get("name", ""), p.get("source", ""), p.get("target", ""))
+
+        if not self._profile_rows:
+            self._add_profile_row("Standard", "", "")
+
+        ctk.CTkButton(
+            parent,
+            text="+ Profil hinzufügen",
+            height=32,
+            fg_color="transparent",
+            border_width=1,
+            border_color="#444",
+            hover_color="#2a2a3a",
+            command=lambda: self._add_profile_row("", "", ""),
+        ).pack(anchor="w", pady=(6, 0))
+
+    def _add_profile_row(self, name: str = "", source: str = "", target: str = ""):
+        outer = ctk.CTkFrame(self._profile_rows_frame, fg_color="#1e1e2e", corner_radius=8)
+        outer.pack(fill="x", pady=(0, 6))
+
+        header = ctk.CTkFrame(outer, fg_color="transparent")
+        header.pack(fill="x", padx=8, pady=(6, 2))
+
+        name_var = tk.StringVar(value=name)
+        ctk.CTkEntry(
+            header, textvariable=name_var, height=28,
+            placeholder_text="Profil-Name…",
+        ).pack(side="left", fill="x", expand=True)
+
+        entry: list = [name_var, None, None, outer]
+        self._profile_rows.append(entry)
+
+        ctk.CTkButton(
+            header, text="✕", width=28, height=28,
+            fg_color="transparent", hover_color="#3a2a2a", text_color="#cc4444",
+            command=lambda e=entry: self._remove_profile_row(e),
+        ).pack(side="right", padx=(8, 0))
+
+        def _folder_entry(row_frame, label_text: str, initial: str, placeholder: str) -> tk.StringVar:
+            r = ctk.CTkFrame(row_frame, fg_color="transparent")
+            r.pack(fill="x", padx=8, pady=(2, 2))
+            ctk.CTkLabel(r, text=label_text, width=110, anchor="w",
+                         font=ctk.CTkFont(size=11)).pack(side="left")
+            var = tk.StringVar(value=initial)
+            ctk.CTkEntry(r, textvariable=var, height=30,
+                         placeholder_text=placeholder).pack(
+                side="left", fill="x", expand=True, padx=(4, 4))
+            ctk.CTkButton(
+                r, text="...", width=34, height=30,
+                command=lambda v=var: v.set(filedialog.askdirectory() or v.get()),
+            ).pack(side="right")
+            return var
+
+        src_var = _folder_entry(outer, "Eingangsordner:", source, "Pflicht…")
+        tgt_var = _folder_entry(outer, "Ausgangsordner:", target, "Leer = im Eingangsordner…")
+
+        ctk.CTkFrame(outer, height=4, fg_color="transparent").pack()
+
+        entry[1] = src_var
+        entry[2] = tgt_var
+
+    def _remove_profile_row(self, entry: list):
+        if entry in self._profile_rows:
+            self._profile_rows.remove(entry)
+        entry[3].destroy()
+
+    # ------------------------------------------------------------------ Modell
+
+    def _model_section(self, parent: ctk.CTkFrame):
+        self._model_keys = {
+            m: config.get_model_key(m)
+            for m in ("claude", "openai", "gemini", "mistral", "groq")
+        }
+        self._current_model = self.cfg.get("active_model", "rules")
+
+        ctk.CTkLabel(
+            parent,
+            text="KI-Modell fuer Umbenennung",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 6))
+
+        display_values = [d for _, d in _MODEL_OPTIONS]
+        self._om_active_model = ctk.CTkOptionMenu(
+            parent,
+            values=display_values,
+            height=36,
+            command=self._on_model_change,
+        )
+        self._om_active_model.set(_MODEL_DISPLAY.get(self._current_model, display_values[0]))
+        self._om_active_model.pack(fill="x", pady=(0, 8))
+
+        self._model_detail_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self._model_detail_frame.pack(fill="x")
+
+        self._rebuild_model_detail(self._current_model)
+
+    def _on_model_change(self, display_value: str):
+        self._capture_current_model_key()
+        self._current_model = _MODEL_ID.get(display_value, "rules")
+        self._rebuild_model_detail(self._current_model)
+
+    def _capture_current_model_key(self):
+        m = getattr(self, "_current_model", "rules")
+        if m in ("rules", "ollama"):
+            return
+        var = getattr(self, f"_var_{m}_key", None)
+        if var:
+            self._model_keys[m] = var.get().strip()
+
+    def _rebuild_model_detail(self, model_key: str):
+        for w in self._model_detail_frame.winfo_children():
+            w.destroy()
+        p = self._model_detail_frame
+        d = _MODEL_DETAIL.get(model_key, _MODEL_DETAIL["rules"])
+
+        if model_key == "ollama":
+            self._text_row(p, "Ollama-Modell (z. B. llama3.2, mistral, gemma3)", "ollama_model")
+            ctk.CTkLabel(
+                p,
+                text=f"  {d['info']}\n  {d['info2']}",
+                font=ctk.CTkFont(size=10),
+                text_color=d["color"],
+                anchor="w",
+                wraplength=460,
+            ).pack(fill="x", pady=(0, 4))
+
+        elif d.get("has_key"):
+            var = tk.StringVar(value=self._model_keys.get(model_key, ""))
+            setattr(self, f"_var_{model_key}_key", var)
+            ctk.CTkEntry(
+                p, textvariable=var, show="*", height=36,
+                placeholder_text="API-Key eingeben...",
+            ).pack(fill="x", pady=(0, 4))
+            ctk.CTkLabel(
+                p,
+                text=f"  {d['hint']}",
+                font=ctk.CTkFont(size=10),
+                text_color="#4488cc",
+                anchor="w",
+                wraplength=460,
+            ).pack(fill="x")
+            ctk.CTkLabel(
+                p,
+                text=f"  {d['warning']}",
+                font=ctk.CTkFont(size=10),
+                text_color=d["color"],
+                anchor="w",
+                wraplength=460,
+            ).pack(fill="x", pady=(0, 4))
+
+        else:  # rules
+            ctk.CTkLabel(
+                p,
+                text=f"  {d['info']}\n  {d['info2']}",
+                font=ctk.CTkFont(size=10),
+                text_color=d["color"],
+                anchor="w",
+                wraplength=460,
+            ).pack(fill="x", pady=(0, 4))
+
+    # ---------------------------------------------------- Benennungsschema
+
+    def _naming_section(self, parent: ctk.CTkFrame):
+        ctk.CTkLabel(
+            parent,
+            text="Benennungsschema",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        self._var_name_template = tk.StringVar(
+            value=self.cfg.get("name_template", "{DATUM}_{ABSENDER}_{BETREFF}")
+        )
+        ctk.CTkEntry(
+            parent,
+            textvariable=self._var_name_template,
+            height=36,
+            placeholder_text="{DATUM}_{ABSENDER}_{BETREFF}",
+        ).pack(fill="x", pady=(0, 4))
+
+        ctk.CTkLabel(
+            parent,
+            text="  Tokens: {DATUM}  {JAHR}  {MONAT}  {TAG}  {ABSENDER}  {BETREFF}  {ORIGINAL}",
+            font=ctk.CTkFont(size=10),
+            text_color="#666",
+            anchor="w",
+        ).pack(fill="x", pady=(0, 10))
+
+        row_fmt = ctk.CTkFrame(parent, fg_color="transparent")
+        row_fmt.pack(fill="x", pady=(0, 4))
+
+        fmt_frame = ctk.CTkFrame(row_fmt, fg_color="transparent")
+        fmt_frame.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        ctk.CTkLabel(fmt_frame, text="Datumsformat", font=ctk.CTkFont(size=11), anchor="w").pack(fill="x")
+        self._om_date_format = ctk.CTkOptionMenu(
+            fmt_frame,
+            values=["YYYY-MM-DD", "DD.MM.YYYY", "YYYYMMDD"],
+            height=32,
+            command=lambda _: self._update_preview(),
+        )
+        self._om_date_format.set(self.cfg.get("date_format", "YYYY-MM-DD"))
+        self._om_date_format.pack(fill="x")
+
+        sep_frame = ctk.CTkFrame(row_fmt, fg_color="transparent")
+        sep_frame.pack(side="left", fill="x", expand=True)
+        ctk.CTkLabel(sep_frame, text="Leerzeichen ersetzen durch", font=ctk.CTkFont(size=11), anchor="w").pack(fill="x")
+        self._om_space_replacement = ctk.CTkOptionMenu(
+            sep_frame,
+            values=["- (Bindestrich)", "_ (Unterstrich)"],
+            height=32,
+            command=lambda _: self._update_preview(),
+        )
+        current_sr = self.cfg.get("space_replacement", "-")
+        self._om_space_replacement.set("_ (Unterstrich)" if current_sr == "_" else "- (Bindestrich)")
+        self._om_space_replacement.pack(fill="x")
+
+        preview_frame = ctk.CTkFrame(parent, fg_color="#1e1e2e", corner_radius=8)
+        preview_frame.pack(fill="x", pady=(10, 0))
+        ctk.CTkLabel(
+            preview_frame, text="Vorschau:",
+            font=ctk.CTkFont(size=10), text_color="#888", anchor="w",
+        ).pack(side="left", padx=(12, 6), pady=10)
+        self._preview_label = ctk.CTkLabel(
+            preview_frame, text="",
+            font=ctk.CTkFont(size=11, family="Courier New"),
+            text_color="#88ccff", anchor="w",
+        )
+        self._preview_label.pack(side="left", fill="x", expand=True, padx=(0, 12), pady=10)
+
+        self._var_name_template.trace_add("write", lambda *_: self._update_preview())
+        self._update_preview()
+
+    def _update_preview(self):
+        from . import renamer
+        template = self._var_name_template.get() or "{DATUM}_{ABSENDER}_{BETREFF}"
+        date_format = self._om_date_format.get()
+        sr = self._om_space_replacement.get()
+        space_replacement = "_" if sr.startswith("_") else "-"
+        try:
+            example = renamer.apply_template(
+                template,
+                datum_raw="2026-05-08",
+                absender="Nova Network",
+                betreff="Lizenz Rechnung",
+                original_stem="20260508",
+                date_format=date_format,
+                space_replacement=space_replacement,
+            )
+            self._preview_label.configure(text=example + ".pdf")
+        except Exception:
+            self._preview_label.configure(text="—")
+
+    # ------------------------------------------------------- Absender-Whitelist
+
+    def _senders_section(self, parent: ctk.CTkFrame):
+        ctk.CTkLabel(
+            parent,
+            text="Absender-Whitelist",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        ctk.CTkLabel(
+            parent,
+            text="  Suchbegriff im OCR-Text → Anzeigename  (Vorrang vor eingebautem Regelwerk)",
+            font=ctk.CTkFont(size=10),
+            text_color="#666",
+            anchor="w",
+        ).pack(fill="x", pady=(0, 8))
+
+        self._sender_rows_frame = tk.Frame(parent, background="#141420", bd=0, highlightthickness=0)
+        self._sender_rows_frame.pack(fill="x")
+
+        self._sender_rows: list[tuple] = []
+
+        for key, val in self.cfg.get("custom_senders", {}).items():
+            self._add_sender_row(key, val)
+
+        ctk.CTkButton(
+            parent,
+            text="+ Eintrag hinzufügen",
+            height=32,
+            fg_color="transparent",
+            border_width=1,
+            border_color="#444",
+            hover_color="#2a2a3a",
+            command=lambda: self._add_sender_row("", ""),
+        ).pack(anchor="w", pady=(6, 0))
+
+    def _add_sender_row(self, key: str = "", value: str = ""):
+        row = ctk.CTkFrame(self._sender_rows_frame, fg_color="#1e1e2e", corner_radius=8)
+        row.pack(fill="x", pady=(0, 4))
+
+        kv = tk.StringVar(value=key)
+        vv = tk.StringVar(value=value)
+
+        ctk.CTkEntry(
+            row, textvariable=kv, height=32, placeholder_text="Suchbegriff…"
+        ).pack(side="left", fill="x", expand=True, padx=(8, 4), pady=6)
+
+        ctk.CTkLabel(row, text="→", text_color="#888", width=20).pack(side="left", padx=2)
+
+        ctk.CTkEntry(
+            row, textvariable=vv, height=32, placeholder_text="Anzeigename…"
+        ).pack(side="left", fill="x", expand=True, padx=(4, 4), pady=6)
+
+        entry = (kv, vv, row)
+        self._sender_rows.append(entry)
+
+        ctk.CTkButton(
+            row, text="✕", width=32, height=32,
+            fg_color="transparent", hover_color="#3a2a2a", text_color="#cc4444",
+            command=lambda t=entry: self._remove_sender_row(t),
+        ).pack(side="right", padx=(0, 6), pady=6)
+
+    def _remove_sender_row(self, entry_tuple: tuple):
+        if entry_tuple in self._sender_rows:
+            self._sender_rows.remove(entry_tuple)
+        entry_tuple[2].destroy()
+
+    # ----------------------------------------------------- Dokumenttypen
+
+    def _doc_types_section(self, parent: ctk.CTkFrame):
+        ctk.CTkLabel(
+            parent,
+            text="Dokumenttypen",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        ctk.CTkLabel(
+            parent,
+            text="  Suchbegriff im OCR-Text → Anzeigename  (Vorrang vor eingebautem Regelwerk)",
+            font=ctk.CTkFont(size=10),
+            text_color="#666",
+            anchor="w",
+        ).pack(fill="x", pady=(0, 8))
+
+        self._doc_type_rows_frame = tk.Frame(parent, background="#141420", bd=0, highlightthickness=0)
+        self._doc_type_rows_frame.pack(fill="x")
+
+        self._doc_type_rows: list[tuple] = []
+
+        for key, val in self.cfg.get("custom_doc_types", {}).items():
+            self._add_doc_type_row(key, val)
+
+        ctk.CTkButton(
+            parent,
+            text="+ Eintrag hinzufügen",
+            height=32,
+            fg_color="transparent",
+            border_width=1,
+            border_color="#444",
+            hover_color="#2a2a3a",
+            command=lambda: self._add_doc_type_row("", ""),
+        ).pack(anchor="w", pady=(6, 0))
+
+    def _add_doc_type_row(self, key: str = "", value: str = ""):
+        row = ctk.CTkFrame(self._doc_type_rows_frame, fg_color="#1e1e2e", corner_radius=8)
+        row.pack(fill="x", pady=(0, 4))
+
+        kv = tk.StringVar(value=key)
+        vv = tk.StringVar(value=value)
+
+        ctk.CTkEntry(
+            row, textvariable=kv, height=32, placeholder_text="Suchbegriff…"
+        ).pack(side="left", fill="x", expand=True, padx=(8, 4), pady=6)
+
+        ctk.CTkLabel(row, text="→", text_color="#888", width=20).pack(side="left", padx=2)
+
+        ctk.CTkEntry(
+            row, textvariable=vv, height=32, placeholder_text="Anzeigename…"
+        ).pack(side="left", fill="x", expand=True, padx=(4, 4), pady=6)
+
+        entry = (kv, vv, row)
+        self._doc_type_rows.append(entry)
+
+        ctk.CTkButton(
+            row, text="✕", width=32, height=32,
+            fg_color="transparent", hover_color="#3a2a2a", text_color="#cc4444",
+            command=lambda t=entry: self._remove_doc_type_row(t),
+        ).pack(side="right", padx=(0, 6), pady=6)
+
+    def _remove_doc_type_row(self, entry_tuple: tuple):
+        if entry_tuple in self._doc_type_rows:
+            self._doc_type_rows.remove(entry_tuple)
+        entry_tuple[2].destroy()
+
+    # ------------------------------------------------- Watcher-Konfiguration
+
+    def _watcher_section(self, parent: ctk.CTkFrame):
+        ctk.CTkLabel(
+            parent,
+            text="Watcher-Konfiguration",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 8))
+
+        # Dateitypen
+        ctk.CTkLabel(
+            parent, text="Dateitypen überwachen",
+            font=ctk.CTkFont(size=11), anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        exts_frame = ctk.CTkFrame(parent, fg_color="#1e1e2e", corner_radius=8)
+        exts_frame.pack(fill="x", pady=(0, 8))
+
+        current_exts = [e.lower() for e in self.cfg.get("watch_extensions", [".pdf"])]
+        self._var_ext_pdf  = tk.BooleanVar(value=".pdf" in current_exts)
+        self._var_ext_jpg  = tk.BooleanVar(value=".jpg" in current_exts or ".jpeg" in current_exts)
+        self._var_ext_tiff = tk.BooleanVar(value=".tiff" in current_exts or ".tif" in current_exts)
+        self._var_ext_png  = tk.BooleanVar(value=".png" in current_exts)
+
+        for label, var in [
+            ("PDF", self._var_ext_pdf), ("JPG/JPEG", self._var_ext_jpg),
+            ("TIFF", self._var_ext_tiff), ("PNG", self._var_ext_png),
+        ]:
+            ctk.CTkCheckBox(
+                exts_frame, text=label, variable=var, onvalue=True, offvalue=False,
+                width=100,
+            ).pack(side="left", padx=12, pady=10)
+
+        # Namensmuster
+        ctk.CTkLabel(
+            parent, text="Namensmuster (Regex)",
+            font=ctk.CTkFont(size=11), anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+        self._var_name_pattern = tk.StringVar(value=self.cfg.get("name_pattern", ""))
+        ctk.CTkEntry(
+            parent, textvariable=self._var_name_pattern, height=36,
+            placeholder_text=r"Leer = nur numerische Namen  (Bsp.: ^\d{6,}$ für mind. 6 Ziffern)",
+        ).pack(fill="x", pady=(0, 8))
+
+        # OCR Seiten + Stabilitäts-Timeout
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=(0, 8))
+
+        left = ctk.CTkFrame(row, fg_color="transparent")
+        left.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        ctk.CTkLabel(left, text="OCR Seiten (max.)", font=ctk.CTkFont(size=11), anchor="w").pack(fill="x")
+        self._om_ocr_max_pages = ctk.CTkOptionMenu(left, values=["1", "2", "3", "4", "5"], height=36)
+        self._om_ocr_max_pages.set(str(self.cfg.get("ocr_max_pages", 2)))
+        self._om_ocr_max_pages.pack(fill="x")
+
+        right = ctk.CTkFrame(row, fg_color="transparent")
+        right.pack(side="left", fill="x", expand=True)
+        ctk.CTkLabel(right, text="Stabilitäts-Timeout (Sek.)", font=ctk.CTkFont(size=11), anchor="w").pack(fill="x")
+        self._om_stability_timeout = ctk.CTkOptionMenu(
+            right, values=["10", "20", "30", "60", "120"], height=36,
+        )
+        self._om_stability_timeout.set(str(self.cfg.get("stability_timeout", 30)))
+        self._om_stability_timeout.pack(fill="x")
+
+        # Duplikat-Strategie
+        ctk.CTkLabel(
+            parent, text="Duplikat-Strategie",
+            font=ctk.CTkFont(size=11), anchor="w",
+        ).pack(fill="x", pady=(8, 4))
+        self._om_duplicate_strategy = ctk.CTkOptionMenu(
+            parent,
+            values=["Suffix hinzufügen (_2, _3 …)", "Überschreiben"],
+            height=36,
+        )
+        strategy = self.cfg.get("duplicate_strategy", "suffix")
+        self._om_duplicate_strategy.set(
+            "Überschreiben" if strategy == "overwrite" else "Suffix hinzufügen (_2, _3 …)"
+        )
+        self._om_duplicate_strategy.pack(fill="x")
+
+        # UNLESBAR_-Ordner
+        ctk.CTkFrame(parent, height=6, fg_color="transparent").pack()
+        self._folder_row(parent, "Ordner für unleserliche Dateien (optional)", "unlesbar_folder")
+        ctk.CTkLabel(
+            parent,
+            text="  Leer = UNLESBAR_-Dateien bleiben im Eingangsordner",
+            font=ctk.CTkFont(size=10), text_color="#666", anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+    # --------------------------------------------------------- Hilfs-Methoden
+
+    def _folder_row(self, parent: ctk.CTkFrame, label: str, key: str):
+        ctk.CTkLabel(
+            parent, text=label, anchor="w",
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(fill="x", pady=(0, 4))
+
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=(0, 10))
+
+        var = tk.StringVar(value=self.cfg.get(key, ""))
+        ctk.CTkEntry(
+            row, textvariable=var, height=36,
+            placeholder_text="Ordner waehlen...",
+        ).pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        ctk.CTkButton(
+            row, text="...", width=42, height=36,
+            command=lambda v=var: v.set(
+                filedialog.askdirectory(initialdir=v.get() or "/") or v.get()
+            ),
+        ).pack(side="right")
+
+        setattr(self, f"_var_{key}", var)
+
+    def _text_row(self, parent: ctk.CTkFrame, label: str, key: str, show: str | None = None):
+        ctk.CTkLabel(
+            parent, text=label, anchor="w",
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(fill="x", pady=(0, 4))
+
+        var = tk.StringVar(value=self.cfg.get(key, ""))
+        kw = {"show": show} if show else {}
+        ctk.CTkEntry(parent, textvariable=var, height=36, **kw).pack(fill="x", pady=(0, 10))
+        setattr(self, f"_var_{key}", var)
+
+    def _toggle_row(self, parent: ctk.CTkFrame, label: str, var: tk.BooleanVar):
+        row = ctk.CTkFrame(parent, fg_color="#1e1e2e", corner_radius=8)
+        row.pack(fill="x", pady=4)
+        ctk.CTkLabel(row, text=label, anchor="w").pack(side="left", padx=16, pady=12)
+        ctk.CTkSwitch(
+            row, text="", variable=var, onvalue=True, offvalue=False, width=48,
+        ).pack(side="right", padx=16)
+
+    def _option_row(self, parent: ctk.CTkFrame, label: str, key: str, options: list):
+        ctk.CTkLabel(
+            parent, text=label, anchor="w",
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(fill="x", pady=(8, 4))
+        current = self.cfg.get(key, options[0])
+        om = ctk.CTkOptionMenu(parent, values=options, height=36)
+        om.set(current)
+        om.pack(fill="x", pady=(0, 4))
+        setattr(self, f"_om_{key}", om)
+
+    def _save(self):
+        profiles = []
+        for name_var, src_var, tgt_var, _ in getattr(self, "_profile_rows", []):
+            src = src_var.get().strip() if src_var else ""
+            if src:
+                profiles.append({
+                    "name": name_var.get().strip() or "Profil",
+                    "source": src,
+                    "target": tgt_var.get().strip() if tgt_var else "",
+                })
+        self.cfg["folder_profiles"] = profiles
+        # Backward-compat: erstes Profil auch in source_folder schreiben
+        self.cfg["source_folder"] = profiles[0]["source"] if profiles else ""
+        self.cfg["target_folder"] = profiles[0]["target"] if profiles else ""
+
+        self.cfg["autostart"]            = self._var_autostart.get()
+        self.cfg["notifications"]        = self._var_notifications.get()
+        self.cfg["log_level"]            = self._om_log_level.get()
+        self.cfg["update_check_enabled"] = self._var_update_check.get()
+        self.cfg["update_channel"]       = (
+            "beta" if self._om_update_channel.get().startswith("Beta") else "stable"
+        )
+        self.cfg["telemetry_enabled"]    = self._var_telemetry.get()
+        self.cfg["name_template"]     = self._var_name_template.get().strip() or "{DATUM}_{ABSENDER}_{BETREFF}"
+        self.cfg["date_format"]       = self._om_date_format.get()
+        sr = self._om_space_replacement.get()
+        self.cfg["space_replacement"] = "_" if sr.startswith("_") else "-"
+
+        # Aktives Modell + API-Keys
+        self._capture_current_model_key()
+        self.cfg["active_model"] = _MODEL_ID.get(self._om_active_model.get(), "rules")
+        for m, key in self._model_keys.items():
+            config.set_model_key(m, key)
+        ollama_var = getattr(self, "_var_ollama_model", None)
+        self.cfg["ollama_model"] = ollama_var.get().strip() if ollama_var else self.cfg.get("ollama_model", "llama3.2")
+
+        custom_senders = {}
+        for kv, vv, _ in getattr(self, "_sender_rows", []):
+            k = kv.get().strip()
+            v = vv.get().strip()
+            if k:
+                custom_senders[k] = v
+        self.cfg["custom_senders"] = custom_senders
+
+        custom_doc_types = {}
+        for kv, vv, _ in getattr(self, "_doc_type_rows", []):
+            k = kv.get().strip()
+            v = vv.get().strip()
+            if k:
+                custom_doc_types[k] = v
+        self.cfg["custom_doc_types"] = custom_doc_types
+
+        # Watcher-Konfiguration
+        exts = []
+        if self._var_ext_pdf.get():   exts.append(".pdf")
+        if self._var_ext_jpg.get():   exts.extend([".jpg", ".jpeg"])
+        if self._var_ext_tiff.get():  exts.extend([".tiff", ".tif"])
+        if self._var_ext_png.get():   exts.append(".png")
+        self.cfg["watch_extensions"]   = exts or [".pdf"]
+        self.cfg["name_pattern"]       = self._var_name_pattern.get().strip()
+        self.cfg["ocr_max_pages"]      = int(self._om_ocr_max_pages.get())
+        self.cfg["stability_timeout"]  = int(self._om_stability_timeout.get())
+        ds = self._om_duplicate_strategy.get()
+        self.cfg["duplicate_strategy"] = "overwrite" if ds == "Überschreiben" else "suffix"
+        unlesbar_var = getattr(self, "_var_unlesbar_folder", None)
+        self.cfg["unlesbar_folder"] = unlesbar_var.get().strip() if unlesbar_var else ""
+
+        if not self.cfg.get("folder_profiles"):
+            messagebox.showerror("Fehler", "Bitte mindestens einen Eingangsordner angeben.")
+            return
+
+        config.save(self.cfg)
+        self.result = self.cfg
+        if self.on_save:
+            self.on_save(self.cfg)
+        self.destroy()
+
+    def _export_settings(self):
+        import json
+        path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON", "*.json"), ("Alle Dateien", "*.*")],
+            initialfile="scanwatcher_einstellungen.json",
+            title="Einstellungen exportieren",
+        )
+        if not path:
+            return
+        to_export = {k: v for k, v in self.cfg.items() if not k.endswith("_key")}
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(to_export, f, indent=2, ensure_ascii=False)
+            messagebox.showinfo("Exportiert", f"Einstellungen gespeichert:\n{path}")
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Export fehlgeschlagen:\n{e}")
+
+    def _import_settings(self):
+        import json
+        path = filedialog.askopenfilename(
+            filetypes=[("JSON", "*.json"), ("Alle Dateien", "*.*")],
+            title="Einstellungen importieren",
+        )
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Import fehlgeschlagen:\n{e}")
+            return
+        merged = {**self.cfg, **{k: v for k, v in data.items() if not k.endswith("_key")}}
+        config.save(merged)
+        if self.on_save:
+            self.on_save(merged)
+        messagebox.showinfo("Importiert", "Einstellungen importiert und gespeichert.")
+        self.destroy()
+
+    def _center(self):
+        w, h = 520, 800
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        h = min(h, sh - 100)
+        self.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
