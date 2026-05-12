@@ -104,6 +104,11 @@ DOKUMENTTYPEN = {
     "einspruch": "Einspruch", "klage": "Klage",
     "protokoll": "Protokoll", "zeugnis": "Zeugnis",
     "urkunde": "Urkunde",
+    # Bewerbung
+    "bewerbung": "Bewerbung", "motivationsschreiben": "Motivationsschreiben",
+    "lebenslauf": "Lebenslauf", "curriculum vitae": "Lebenslauf",
+    "arbeitszeugnis": "Arbeitszeugnis", "zwischenzeugnis": "Zwischenzeugnis",
+    "bewerbungsunterlagen": "Bewerbungsunterlagen",
 }
 
 
@@ -986,6 +991,12 @@ def _extract_sender(text: str, space_replacement: str = "-", custom_senders: dic
     for key, canonical in BEKANNTE_BRANCHEN.items():
         if key in tl:
             return clean(canonical, space_replacement)
+
+    # 3c. Bewerbungs-Dokumente: kein externer Absender → Eigenbezeichnung
+    _BEWERBUNG_KEYS = ["bewerbung", "motivationsschreiben", "lebenslauf",
+                       "curriculum vitae", "arbeitszeugnis", "zwischenzeugnis"]
+    if any(k in tl for k in _BEWERBUNG_KEYS):
+        return "Bewerbung"
 
     # 4. Heuristik: Zeile mit Unternehmens-Suffix in ersten 30 Zeilen
     for line in lines[:30]:
