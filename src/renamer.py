@@ -1282,6 +1282,16 @@ def _extract_sender(text: str, space_replacement: str = "-", custom_senders: dic
         if key in first_30:
             return clean(name, space_replacement)
 
+    # 2b. Bewerbungs-Dokumente: sofort Name aus Signatur/Absenderblock zurückgeben.
+    #     Muss VOR den BEKANNTE_BRANCHEN-Checks stehen, da OCR-Artefakte wie
+    #     "Uber" (aus "Über") sonst als Uber-Brand matchen und Fließtext-Zeilen
+    #     als Absender zurückliefern.
+    _BEWERBUNG_KEYS = ["bewerbung", "motivationsschreiben", "lebenslauf",
+                       "curriculum vitae", "arbeitszeugnis", "zwischenzeugnis"]
+    if any(k in tl for k in _BEWERBUNG_KEYS):
+        name = _extract_bewerber_name(lines, space_replacement)
+        return name if name else "Bewerber"
+
     # 3. Bekannte Marken/Branchen – erst in den ersten 30 Zeilen (Briefkopf),
     #    dann Fallback auf den gesamten Text (Brieffuß, Impressum, OCR-Reihung).
     # Für Keys ≤ 4 Zeichen wird Word-Boundary geprüft (verhindert z.B.
@@ -1311,26 +1321,15 @@ def _extract_sender(text: str, space_replacement: str = "-", custom_senders: dic
     #     Greift z.B. wenn der Briefkopf als Bild eingebettet ist (pdfplumber
     #     liest dann nur den Textteil ab Zeile 30+) oder wenn der Firmenname
     #     nur im Brieffuß steht. Gibt immer den kanonischen Kurznamen zurück.
-    # Achtung: Für Keys ≤ 4 Zeichen wird Word-Boundary geprüft (verhindert
-    #          Substring-Matches wie "ewe" in "bewerbung" oder "dm" in "damen").
-    _BEWERBUNG_KEYS = ["bewerbung", "motivationsschreiben", "lebenslauf",
-                       "curriculum vitae", "arbeitszeugnis", "zwischenzeugnis"]
-    if not any(k in tl for k in _BEWERBUNG_KEYS):
-        for key, canonical in BEKANNTE_BRANCHEN.items():
-            if len(key) <= 4:
-                if re.search(r'\b' + re.escape(key) + r'\b', tl):
-                    return clean(canonical, space_replacement)
-            else:
-                if key in tl:
-                    return clean(canonical, space_replacement)
-
-    # 3c. Bewerbungs-Dokumente: Bewerber-Name aus Signatur oder Absenderblock
-    # _BEWERBUNG_KEYS ist bereits oben in 3b definiert
-    _BEWERBUNG_KEYS = ["bewerbung", "motivationsschreiben", "lebenslauf",
-                       "curriculum vitae", "arbeitszeugnis", "zwischenzeugnis"]
-    if any(k in tl for k in _BEWERBUNG_KEYS):
-        name = _extract_bewerber_name(lines, space_replacement)
-        return name if name else "Bewerber"
+    # Achtung: Für Keys ≤ 4 Zeichen wird Word-Boundary geprüft.
+    #     Bewerbungen sind durch den Check in 2b bereits ausgeschieden.
+    for key, canonical in BEKANNTE_BRANCHEN.items():
+        if len(key) <= 4:
+            if re.search(r'\b' + re.escape(key) + r'\b', tl):
+                return clean(canonical, space_replacement)
+        else:
+            if key in tl:
+                return clean(canonical, space_replacement)
 
     # 4. Heuristik: Zeile mit Unternehmens-Suffix in ersten 30 Zeilen
     for line in lines[:30]:

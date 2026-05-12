@@ -334,6 +334,21 @@ def test_bewerbung_full_pipeline():
     assert "Bewerbung" in result
 
 
+def test_bewerbung_kein_uber_ocr_artefakt():
+    """OCR 'Uber' (aus 'Über') darf nicht als Uber-Brand matchen wenn Bewerbung."""
+    # "Uber" ist OCR-Artefakt für "Über" in "Über eine Einladung..."
+    text = (
+        "Uber eine Einladung zu einem Vorstellungsgesprach freue ich mich sehr.\n"
+        "Ich bewerbe mich hiermit um die ausgeschriebene Stelle.\n"
+        "\nBewerbung als Entwickler\n"
+        "\nMit freundlichen Grüßen\n\nKlaus Mustermann\n"
+    )
+    sender = _extract_sender(text)
+    # Darf nicht die ganze Fließtextzeile zurückgeben
+    assert "Einladung" not in sender
+    assert "freue" not in sender.lower()
+
+
 def test_kein_ladung_falschtreffer():
     """'Ladung' darf nicht durch 'Einladung' im Text getriggert werden."""
     text = "Über eine Einladung zu einem Vorstellungsgespräch freue ich mich."
