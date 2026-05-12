@@ -997,13 +997,19 @@ def _extract_sender(text: str, space_replacement: str = "-", custom_senders: dic
     #    werden herausgefiltert, damit nicht der Kundenname als Absender landet.
     _SKIP = {"rechnung", "datum", "betreff", "subject", "seite", "page",
              "sehr geehrte", "hiermit", "anlage", "ihre", "unser",
-             "herr", "frau", "herrn"}
+             "herr", "frau", "herrn", "ich ", " ich ", "mich", "wir ",
+             "bitte", "gerne", "leider", "daher", "sowie", "wobei",
+             "bewerbung", "lebenslauf", "motivationsschreiben"}
     for line in lines[:20]:
         if len(line) < 4 or len(line) > 60:
             continue
         if line[0].isdigit():
             continue
-        if any(w in line.lower() for w in _SKIP):
+        ll = line.lower()
+        if any(w in ll for w in _SKIP):
+            continue
+        # Zeilen mit mehr als 4 Wörtern sind Fließtext, kein Firmenname
+        if len(line.split()) > 4:
             continue
         if _RE_ADDRESS.search(line):
             continue
