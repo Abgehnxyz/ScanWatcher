@@ -76,10 +76,11 @@ _MODEL_DETAIL = {
 
 
 class SettingsDialog(ctk.CTkToplevel):
-    def __init__(self, parent, cfg: dict, on_save=None):
+    def __init__(self, parent, cfg: dict, on_save=None, version: str = ""):
         super().__init__(parent)
         self.cfg = cfg.copy()
         self.on_save = on_save
+        self.version = version
         self.result = None
 
         self.title("Scan Watcher – Einstellungen")
@@ -100,7 +101,15 @@ class SettingsDialog(ctk.CTkToplevel):
             text="⚙  Scan Watcher",
             font=ctk.CTkFont(size=18, weight="bold"),
             text_color="white",
-        ).pack(side="left", padx=20)
+        ).pack(side="left", padx=(20, 6))
+
+        if self.version:
+            ctk.CTkLabel(
+                header,
+                text=f"v{self.version}",
+                font=ctk.CTkFont(size=11),
+                text_color="#888",
+            ).pack(side="left", pady=(6, 0))
 
         ctk.CTkButton(
             header,
@@ -111,8 +120,7 @@ class SettingsDialog(ctk.CTkToplevel):
             command=lambda: __import__("webbrowser").open("https://ko-fi.com/novanetwork"),
         ).pack(side="right", padx=16)
 
-        main = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        main.pack(fill="both", expand=True, padx=24, pady=20)
+        main = self._make_scroll_area()
 
         self._profiles_section(main)
 
@@ -185,7 +193,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             main,
-            text="  Kein Personenbezug. Nur: App-Version, Modell, Erfolg/Fehler. Daten gehen an ops.abgehn.xyz.",
+            text="  Kein Personenbezug. Nur: App-Version, genutztes Modell, Erfolg/Fehler.",
             font=ctk.CTkFont(size=10),
             text_color="#4488cc",
             anchor="w",
@@ -218,6 +226,39 @@ class SettingsDialog(ctk.CTkToplevel):
             fg_color="transparent", border_width=1, border_color="#444",
             hover_color="#2a2a3a", command=self._export_settings,
         ).pack(side="left", padx=(0, 4), pady=12)
+
+    # --------------------------------------------------------- Scroll-Bereich
+
+    def _make_scroll_area(self) -> ctk.CTkFrame:
+        """Flicker-freier Scrollbereich: tk.Canvas + CTkScrollbar statt CTkScrollableFrame."""
+        container = ctk.CTkFrame(self, fg_color="transparent")
+        container.pack(fill="both", expand=True)
+
+        canvas = tk.Canvas(container, bg="#141420", highlightthickness=0, bd=0)
+        sb = ctk.CTkScrollbar(container, command=canvas.yview)
+        sb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        canvas.configure(yscrollcommand=sb.set)
+
+        inner = ctk.CTkFrame(canvas, fg_color="transparent")
+        win_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        inner.bind("<Configure>",
+                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>",
+                    lambda e: canvas.itemconfigure(win_id, width=e.width))
+
+        def _scroll(e):
+            canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
+
+        # Scroll nur aktiv solange Dialog offen
+        self.bind_all("<MouseWheel>", _scroll)
+        self.bind("<Destroy>", lambda e: self.unbind_all("<MouseWheel>"))
+
+        # Padding-Wrapper – entspricht dem früheren padx=24, pady=20
+        padded = ctk.CTkFrame(inner, fg_color="transparent")
+        padded.pack(fill="x", padx=24, pady=20)
+        return padded
 
     # --------------------------------------------------------- Ordner-Profile
 

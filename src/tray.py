@@ -98,7 +98,7 @@ class TrayApp:
         self._icon = pystray.Icon(
             name="ScanWatcher",
             icon=create_icon_image(self._any_running()),
-            title="Scan Watcher",
+            title=f"Scan Watcher v{self.version}",
             menu=menu,
         )
         self._icon.run()
@@ -129,7 +129,8 @@ class TrayApp:
             import customtkinter as ctk
             root = ctk.CTk()
             root.withdraw()
-            dlg = SettingsDialog(root, self.cfg, on_save=self._on_settings_saved)
+            dlg = SettingsDialog(root, self.cfg, on_save=self._on_settings_saved,
+                                  version=self.version)
             root.wait_window(dlg)
             root.destroy()
 
