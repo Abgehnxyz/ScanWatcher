@@ -40,6 +40,9 @@ jobs:
           Invoke-WebRequest `
             -Uri "https://github.com/tesseract-ocr/tessdata/raw/main/deu.traineddata" `
             -OutFile "$tessDir\deu.traineddata"
+          Invoke-WebRequest `
+            -Uri "https://github.com/tesseract-ocr/tessdata/raw/main/eng.traineddata" `
+            -OutFile "$tessDir\eng.traineddata"
 
       - name: Build EXE with PyInstaller
         shell: pwsh
