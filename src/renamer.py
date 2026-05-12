@@ -1217,6 +1217,55 @@ BEKANNTE_BRANCHEN = {
     "fitbit": "Fitbit",
 }
 
+# Abschlussformeln, nach denen der Bewerber-Name steht
+_RE_GRUSSFORMEL = re.compile(
+    r'(?:Mit\s+freundlichen?\s+Gr[üu][ß]en?|'
+    r'Hochachtungsvoll|'
+    r'Mit\s+freundlichen?\s+Gr[üu][ß]en?|'
+    r'Freundliche\s+Gr[üu][ß]e|'
+    r'Viele\s+Gr[üu][ß]e|'
+    r'MfG)\s*[\n\r]+',
+    re.IGNORECASE,
+)
+
+# Einfacher Name: 2–4 Wörter, nur Buchstaben/Bindestrich
+_RE_NAME = re.compile(r'^[A-ZÄÖÜ][a-zA-ZäöüÄÖÜß\-]+(?: [A-ZÄÖÜ][a-zA-ZäöüÄÖÜß\-]+){1,3}$')
+
+
+def _extract_bewerber_name(lines: list[str], space_replacement: str = "-") -> str:
+    """
+    Extrahiert den Namen eines Bewerbers aus:
+    1. Den Zeilen nach der Grußformel (Unterschriftsblock)
+    2. Den ersten 4 Zeilen des Dokuments (Absender-Adressblock oben rechts)
+    """
+    full_text = "\n".join(lines)
+
+    # Strategie 1: Name nach Grußformel
+    m = _RE_GRUSSFORMEL.search(full_text)
+    if m:
+        rest = full_text[m.end():]
+        for line in rest.split("\n"):
+            candidate = line.strip()
+            # Leerzeilen und sehr kurze Zeilen (Unterschrift-Bild etc.) überspringen
+            if len(candidate) < 4:
+                continue
+            # Typische Unterschrifts-Artefakte überspringen
+            if re.match(r'^[^a-zA-ZÄÖÜäöü]', candidate):
+                continue
+            if _RE_NAME.match(candidate):
+                return clean(candidate, space_replacement)
+            # Auch "Vorname\nNachname" über zwei Zeilen fangen
+            break
+
+    # Strategie 2: Erste Zeile des Dokuments die wie ein Name aussieht
+    # (typisch: Absender-Block oben rechts bei privatem Anschreiben)
+    for line in lines[:6]:
+        candidate = line.strip()
+        if _RE_NAME.match(candidate):
+            return clean(candidate, space_replacement)
+
+    return ""
+
 
 def _extract_sender(text: str, space_replacement: str = "-", custom_senders: dict | None = None) -> str:
     lines = [l.strip() for l in text.split("\n") if l.strip()]
@@ -1235,12 +1284,20 @@ def _extract_sender(text: str, space_replacement: str = "-", custom_senders: dic
 
     # 3. Bekannte Marken/Branchen – erst in den ersten 30 Zeilen (Briefkopf),
     #    dann Fallback auf den gesamten Text (Brieffuß, Impressum, OCR-Reihung).
+    # Für Keys ≤ 4 Zeichen wird Word-Boundary geprüft (verhindert z.B.
+    # "lbs" in "selbstverständlich" oder "ewe" in "bewerbung").
     for key, canonical in BEKANNTE_BRANCHEN.items():
-        if key in first_30:
+        if len(key) <= 4:
+            matched_in_first30 = bool(re.search(r'\b' + re.escape(key) + r'\b', first_30))
+        else:
+            matched_in_first30 = key in first_30
+        if matched_in_first30:
             # Zeile finden, die den Begriff enthält
             for line in lines[:30]:
                 ll = line.lower()
-                if key in ll and 3 < len(line) <= 120:
+                hit = (re.search(r'\b' + re.escape(key) + r'\b', ll)
+                       if len(key) <= 4 else key in ll)
+                if hit and 3 < len(line) <= 120:
                     # Enthält die Zeile Adressdaten (PLZ, Postfach, Straße…)?
                     # Dann nur den kanonischen Kurznamen zurückgeben, nicht die
                     # ganze Adresszeile ("Volksbank Freiburg eG . Postfach 540 . 79005 Freiburg")
@@ -1254,15 +1311,26 @@ def _extract_sender(text: str, space_replacement: str = "-", custom_senders: dic
     #     Greift z.B. wenn der Briefkopf als Bild eingebettet ist (pdfplumber
     #     liest dann nur den Textteil ab Zeile 30+) oder wenn der Firmenname
     #     nur im Brieffuß steht. Gibt immer den kanonischen Kurznamen zurück.
-    for key, canonical in BEKANNTE_BRANCHEN.items():
-        if key in tl:
-            return clean(canonical, space_replacement)
+    # Achtung: Für Keys ≤ 4 Zeichen wird Word-Boundary geprüft (verhindert
+    #          Substring-Matches wie "ewe" in "bewerbung" oder "dm" in "damen").
+    _BEWERBUNG_KEYS = ["bewerbung", "motivationsschreiben", "lebenslauf",
+                       "curriculum vitae", "arbeitszeugnis", "zwischenzeugnis"]
+    if not any(k in tl for k in _BEWERBUNG_KEYS):
+        for key, canonical in BEKANNTE_BRANCHEN.items():
+            if len(key) <= 4:
+                if re.search(r'\b' + re.escape(key) + r'\b', tl):
+                    return clean(canonical, space_replacement)
+            else:
+                if key in tl:
+                    return clean(canonical, space_replacement)
 
-    # 3c. Bewerbungs-Dokumente: kein externer Absender → Eigenbezeichnung
+    # 3c. Bewerbungs-Dokumente: Bewerber-Name aus Signatur oder Absenderblock
+    # _BEWERBUNG_KEYS ist bereits oben in 3b definiert
     _BEWERBUNG_KEYS = ["bewerbung", "motivationsschreiben", "lebenslauf",
                        "curriculum vitae", "arbeitszeugnis", "zwischenzeugnis"]
     if any(k in tl for k in _BEWERBUNG_KEYS):
-        return "Bewerbung"
+        name = _extract_bewerber_name(lines, space_replacement)
+        return name if name else "Bewerber"
 
     # 4. Heuristik: Zeile mit Unternehmens-Suffix in ersten 30 Zeilen
     for line in lines[:30]:
@@ -1297,6 +1365,7 @@ def _extract_sender(text: str, space_replacement: str = "-", custom_senders: dic
 
 
 def _extract_subject(text: str, space_replacement: str = "-", custom_doc_types: dict | None = None) -> str:
+    # ── 1. Strukturierte Muster (Rechnungsnummer, AZ, etc.) ─────────────────
     patterns = [
         (r"Rechnung(?:snummer)?[:\s#]*([A-Z]{0,3}[\d][\d\-/]{3,20})", "Rechnung-{}"),
         (r"Az\.[:\s]*([^\n\r]{3,30})", "Az-{}"),
@@ -1313,15 +1382,79 @@ def _extract_subject(text: str, space_replacement: str = "-", custom_doc_types: 
             return fmt.format(val)
 
     tl = text.lower()
-    # Benutzerdefinierte Dokumenttypen haben Vorrang vor der eingebauten Liste
+
+    # ── 2. Bewerbungs-Erkennung: Betreffzeile auswerten ─────────────────────
+    _BEWERBUNG_SUBJECT_KEYS = [
+        "bewerbung", "bewerbungsunterlagen", "motivationsschreiben",
+        "lebenslauf", "curriculum vitae", "arbeitszeugnis", "zwischenzeugnis",
+    ]
+    if any(k in tl for k in _BEWERBUNG_SUBJECT_KEYS):
+        stelle = _extract_bewerbung_stelle(text, space_replacement)
+        if stelle:
+            return f"Bewerbung-{stelle}"
+        return "Bewerbung"
+
+    # ── 3. Keyword-Matching mit Word-Boundary (verhindert Teilwort-Treffer) ──
+    # Benutzerdefinierte Dokumenttypen haben Vorrang
     for key, name in (custom_doc_types or {}).items():
-        if key.lower() in tl:
+        if re.search(r'\b' + re.escape(key.lower()) + r'\b', tl):
             return clean(name, space_replacement)
+    # Eingebaute Liste: erst Betreff-Block (erste 5 Zeilen), dann Volltext
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    subject_block = "\n".join(lines[:5]).lower()
     for key, name in DOKUMENTTYPEN.items():
-        if key in tl:
+        if re.search(r'\b' + re.escape(key) + r'\b', subject_block):
+            return name
+    for key, name in DOKUMENTTYPEN.items():
+        if re.search(r'\b' + re.escape(key) + r'\b', tl):
             return name
 
     return "Dokument"
+
+
+# Regex zum Erkennen der Betreffzeile in Anschreiben
+_RE_BETREFF = re.compile(
+    r"""
+    (?:Betreff\s*:\s*|                         # explizites "Betreff:"
+    (?:Bewerbung|Kündigung|Antrag|Anfrage)      # oder Zeile beginnt mit Schlüsselwort
+    \s+(?:um|als|für|zur|zum|auf|fuer|wegen)\b  # + Präposition
+    )
+    (.{5,120})                                  # Betreff-Inhalt
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Schlüsselwörter, die direkt auf die Stelle hinweisen
+_RE_STELLE = re.compile(
+    r"""
+    (?:
+        ausbildungsplatz\s+(?:als|zum?|zur?)\s+|
+        stelle\s+(?:als|zum?|zur?)\s+|
+        position\s+(?:als|zum?|zur?)\s+|
+        (?:als|zum?|zur?)\s+                   # einfaches "als Entwickler"
+    )
+    ([A-ZÄÖÜ][a-zäöüßA-ZÄÖÜ\-/\s]{3,50})     # die eigentliche Stellenbezeichnung
+    """,
+    re.VERBOSE,
+)
+
+
+def _extract_bewerbung_stelle(text: str, space_replacement: str = "-") -> str:
+    """Extrahiert die Stellenbezeichnung aus einer Bewerbung (max. 35 Zeichen)."""
+    # Suche zuerst in einer expliziten Betreffzeile
+    m_betreff = _RE_BETREFF.search(text)
+    search_text = m_betreff.group(1) if m_betreff else text
+
+    m_stelle = _RE_STELLE.search(search_text)
+    if m_stelle:
+        stelle = m_stelle.group(1).strip()
+        # Langzeilen abschneiden (z.B. "Karosserie- und Fahrzeugbaumechaniker")
+        # → erstes Wort wenn > 35 Zeichen, sonst komplett
+        stelle = stelle[:35].strip()
+        # Trailingzeichen bereinigen (z.B. angerissenes Wort)
+        stelle = re.sub(r'[\s\-und]+$', '', stelle)
+        return clean(stelle, space_replacement) if stelle else ""
+    return ""
 
 
 def unique_path(folder: str, filename: str, strategy: str = "suffix") -> str:

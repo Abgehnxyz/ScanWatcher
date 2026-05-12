@@ -12,6 +12,7 @@ from src.renamer import (
     apply_template, clean, unique_path,
     _extract_date, _extract_sender, _extract_subject,
     _format_date, _via_rules,
+    _extract_bewerber_name, _extract_bewerbung_stelle,
 )
 
 
@@ -261,3 +262,94 @@ def test_via_claude_api_error():
     with patch("anthropic.Anthropic", side_effect=Exception("unauthorized")):
         result = _via_claude("OCR-Text", "001.pdf", "bad-key")
     assert result is None
+
+
+# ------------------------------------------------- Bewerbungs-Erkennung ----
+
+# Realitätsnaher OCR-Text wie im angehängten Screenshot
+_BEWERBUNG_TEXT = """\
+Rezaie Mohsen
+Andreas-Hofer-Straße 68
+79111 Freiburg
+Tel. 01786903950
+Mohsenrazaei17@icloud.com
+
+Fred Bank GmbH & Co: KG
+Vordermattenstraße 7
+79108 Freiburg
+
+Freiburg, 14. April 2026
+
+Bewerbung um einen Ausbildungsplatz als Karosserie- und Fahrzeugbaumechaniker
+
+Sehr geehrte Damen und Herren,
+
+mit großem Interesse habe ich Ihre Stellenanzeige gelesen.
+Ich interessiere mich sehr für Fahrzeuge und handwerkliche Tätigkeiten.
+Teamarbeit ist für mich selbstverständlich, gleichzeitig arbeite ich auch eigenständig.
+
+Mit freundlichen Grüßen
+
+Mohsen Rezaie
+"""
+
+
+def test_bewerbung_sender_aus_signatur():
+    """Name wird aus dem Unterschriftsblock nach der Grußformel extrahiert."""
+    lines = [l.strip() for l in _BEWERBUNG_TEXT.split("\n") if l.strip()]
+    name = _extract_bewerber_name(lines)
+    assert name == "Mohsen-Rezaie"
+
+
+def test_bewerbung_sender_aus_absenderblock():
+    """Fallback: Name aus der ersten Zeile des Dokuments (Absenderblock oben)."""
+    text = "Lena Müller\nHauptstraße 1\n12345 Berlin\n\nBewerbung als Entwicklerin"
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    name = _extract_bewerber_name(lines)
+    assert name == "Lena-Mueller"
+
+
+def test_bewerbung_stelle_aus_betreff():
+    """Stellenbezeichnung wird aus dem Betreff extrahiert."""
+    stelle = _extract_bewerbung_stelle(_BEWERBUNG_TEXT)
+    assert stelle  # nicht leer
+    assert "Karosserie" in stelle or "Fahrzeug" in stelle
+
+
+def test_bewerbung_subject_enthaelt_stelle():
+    """_extract_subject gibt 'Bewerbung-<Stelle>' zurück."""
+    result = _extract_subject(_BEWERBUNG_TEXT)
+    assert result.startswith("Bewerbung-")
+    assert "Karosserie" in result or "Fahrzeug" in result
+
+
+def test_bewerbung_full_pipeline():
+    """Vollständige Pipeline liefert sinnvollen Dateinamen."""
+    result = _via_rules(_BEWERBUNG_TEXT, "20260414001.pdf")
+    assert "2026-04-14" in result
+    # Absender ist Bewerber-Name, nicht Fließtext
+    assert "selbstverstaendlich" not in result.lower()
+    assert "gleichzeitig" not in result.lower()
+    # Dokumenttyp enthält Bewerbung
+    assert "Bewerbung" in result
+
+
+def test_kein_ladung_falschtreffer():
+    """'Ladung' darf nicht durch 'Einladung' im Text getriggert werden."""
+    text = "Über eine Einladung zu einem Vorstellungsgespräch freue ich mich."
+    result = _extract_subject(text)
+    assert result != "Ladung"
+
+
+def test_kein_klage_in_erklaerung():
+    """'klage' darf nicht in 'Erklärung' matchen."""
+    text = "Datenschutzerklärung der Muster GmbH"
+    result = _extract_subject(text)
+    assert result != "Klage"
+
+
+def test_subject_kuendigung_als_ganzes_wort():
+    """'Kündigung' als eigenständiges Wort wird korrekt erkannt."""
+    text = "Kündigung des Mobilfunkvertrages"
+    assert _extract_subject(text) == "Kuendigung"
+
