@@ -14,7 +14,7 @@ import traceback
 
 from . import config, telemetry
 
-APP_VERSION = "1.0.11"
+APP_VERSION = "1.0.12"
 
 
 def _ensure_single_instance():
