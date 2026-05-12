@@ -45,7 +45,7 @@ DEFAULT_CONFIG = {
     "appearance_mode": "dark",
     "unlesbar_folder": "",
     "update_channel": "stable",
-    "update_check_enabled": False,
+    "update_check_enabled": True,
     "last_motd_id": "",
 }
 
