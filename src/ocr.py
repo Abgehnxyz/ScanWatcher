@@ -11,6 +11,7 @@
 import io
 import logging
 import sys
+import winreg
 from pathlib import Path
 from typing import NamedTuple
 
@@ -43,14 +44,17 @@ def _resolve_tesseract(tesseract_exe: str) -> str:
         resolved = base / tesseract_exe
         if resolved.exists():
             return str(resolved)
-        # Entwicklungsmodus: gängige Windows-Installationspfade als Fallback
-        for common in [
-            Path("C:/Program Files/Tesseract-OCR/tesseract.exe"),
-            Path("C:/Program Files (x86)/Tesseract-OCR/tesseract.exe"),
-        ]:
-            if common.exists():
-                log.debug(f"Tesseract gefunden: {common}")
-                return str(common)
+        # Entwicklungsmodus: Installationspfad aus Windows-Registry lesen
+        try:
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Tesseract-OCR")
+            install_dir, _ = winreg.QueryValueEx(key, "InstallDir")
+            winreg.CloseKey(key)
+            registry_path = Path(install_dir) / "tesseract.exe"
+            if registry_path.exists():
+                log.debug(f"Tesseract aus Registry: {registry_path}")
+                return str(registry_path)
+        except OSError:
+            pass
         # Letzter Fallback: System-PATH nutzen
         return "tesseract"
     return tesseract_exe

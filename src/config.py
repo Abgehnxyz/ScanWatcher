@@ -4,7 +4,7 @@
 @company Nova Network
 @date    Mai 2026
 @brief   Konfigurationsverwaltung – laedt und speichert Einstellungen
-         unter %%APPDATA%%\ScanWatcher\config.json, verwaltet Autostart-Registry.
+         unter %%APPDATA%%\\ScanWatcher\\config.json, verwaltet Autostart-Registry.
 """
 
 import json
