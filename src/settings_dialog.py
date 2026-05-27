@@ -29,6 +29,15 @@ _MODEL_OPTIONS = [
 _MODEL_ID      = {display: key for key, display in _MODEL_OPTIONS}
 _MODEL_DISPLAY = {key: display for key, display in _MODEL_OPTIONS}
 
+def _mask_key(key: str) -> str:
+    """Zeigt erste 6 + ••••••• + letzte 4 Zeichen eines API-Keys."""
+    if not key:
+        return ""
+    if len(key) <= 12:
+        return key[:2] + "\u2022" * max(1, len(key) - 2)
+    return key[:6] + "\u2022" * 8 + key[-4:]
+
+
 _MODEL_DETAIL = {
     "rules": {
         "has_key": False,
@@ -408,7 +417,39 @@ class SettingsDialog(ctk.CTkToplevel):
             return
         var = getattr(self, f"_var_{m}_key", None)
         if var:
-            self._model_keys[m] = var.get().strip()
+            val = var.get().strip()
+            if val:  # nur überschreiben wenn wirklich etwas getippt wurde
+                self._model_keys[m] = val
+
+    def _edit_model_key(self, model_key: str):
+        """'Ändern' geklickt: Key in _model_keys löschen, Eingabefeld anzeigen."""
+        self._model_keys[model_key] = ""
+        self._rebuild_model_detail(self._current_model)
+
+    def _delete_model_key(self, model_key: str):
+        """Key dauerhaft aus Credential Manager löschen."""
+        label = _MODEL_DISPLAY.get(model_key, model_key)
+        if messagebox.askyesno(
+            "API-Key löschen",
+            f"Den gespeicherten API-Key für\n{label}\nwirklich löschen?",
+            parent=self,
+        ):
+            self._model_keys[model_key] = ""
+            config.set_model_key(model_key, "")
+            self._rebuild_model_detail(self._current_model)
+
+    def _toggle_key_visibility(self, model_key: str):
+        """Auge-Toggle: Key im Klartext oder maskiert anzeigen."""
+        entry = getattr(self, f"_entry_{model_key}", None)
+        btn   = getattr(self, f"_btn_eye_{model_key}", None)
+        if not entry:
+            return
+        attr = f"_eye_visible_{model_key}"
+        visible = not getattr(self, attr, False)
+        setattr(self, attr, visible)
+        entry.configure(show="" if visible else "*")
+        if btn:
+            btn.configure(text="\U0001f648" if visible else "\U0001f441")
 
     def _rebuild_model_detail(self, model_key: str):
         for w in self._model_detail_frame.winfo_children():
@@ -428,12 +469,60 @@ class SettingsDialog(ctk.CTkToplevel):
             ).pack(fill="x", pady=(0, 4))
 
         elif d.get("has_key"):
-            var = tk.StringVar(value=self._model_keys.get(model_key, ""))
-            setattr(self, f"_var_{model_key}_key", var)
-            ctk.CTkEntry(
-                p, textvariable=var, show="*", height=36,
-                placeholder_text="API-Key eingeben...",
-            ).pack(fill="x", pady=(0, 4))
+            existing_key = self._model_keys.get(model_key, "")
+
+            if existing_key:
+                # ── Schlüssel vorhanden: Masked-Preview-Zeile ──────────────
+                key_row = ctk.CTkFrame(p, fg_color="#151f15", corner_radius=6)
+                key_row.pack(fill="x", pady=(0, 4))
+
+                ctk.CTkLabel(
+                    key_row,
+                    text=f"\U0001f511  {_mask_key(existing_key)}",
+                    font=ctk.CTkFont(size=11, family="Courier New"),
+                    text_color="#55cc55",
+                    anchor="w",
+                ).pack(side="left", padx=(12, 0), pady=8)
+
+                ctk.CTkButton(
+                    key_row, text="Löschen", width=78, height=28,
+                    fg_color="transparent", border_width=1,
+                    border_color="#663333", hover_color="#3a1a1a",
+                    text_color="#cc4444",
+                    command=lambda mk=model_key: self._delete_model_key(mk),
+                ).pack(side="right", padx=(4, 8), pady=8)
+
+                ctk.CTkButton(
+                    key_row, text="Ändern", width=78, height=28,
+                    fg_color="transparent", border_width=1,
+                    border_color="#444", hover_color="#2a2a3a",
+                    command=lambda mk=model_key: self._edit_model_key(mk),
+                ).pack(side="right", padx=(4, 0), pady=8)
+
+            else:
+                # ── Kein Schlüssel: Eingabefeld anzeigen ──────────────────
+                var = tk.StringVar(value="")
+                setattr(self, f"_var_{model_key}_key", var)
+
+                entry_row = ctk.CTkFrame(p, fg_color="transparent")
+                entry_row.pack(fill="x", pady=(0, 4))
+
+                entry = ctk.CTkEntry(
+                    entry_row, textvariable=var, show="*", height=36,
+                    placeholder_text="API-Key einfügen  (Strg+V) ...",
+                )
+                entry.pack(side="left", fill="x", expand=True, padx=(0, 4))
+                entry.focus()
+                setattr(self, f"_entry_{model_key}", entry)
+
+                btn_eye = ctk.CTkButton(
+                    entry_row, text="\U0001f441", width=36, height=36,
+                    fg_color="#2a2a3a", hover_color="#3a3a4a",
+                    command=lambda mk=model_key: self._toggle_key_visibility(mk),
+                )
+                btn_eye.pack(side="left")
+                setattr(self, f"_btn_eye_{model_key}", btn_eye)
+
             ctk.CTkLabel(
                 p,
                 text=f"  {d['hint']}",
