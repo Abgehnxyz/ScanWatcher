@@ -400,9 +400,14 @@ def _build_prompt_header(name_template: str, date_format: str, space_replacement
     )
     return (
         f"Format-Template: {name_template}\n"
-        f"Datumsformat: {date_format}\n"
+        f"  DATUM    = Datum des Dokuments, Format: {date_format}\n"
+        f"  ABSENDER = Firma oder Person, die das Dokument ausstellt.\n"
+        f"             Kurz! Max. 2-3 Woerter. Nur der Name, keine Satzfragmente.\n"
+        f"             Beispiel: 'Telekom', 'Finanzamt-Muenchen', 'AOK', 'Autotak'\n"
+        f"  BETREFF  = Dokumententyp oder Kernthema. Kurz! Max. 2-3 Woerter.\n"
+        f"             Beispiel: 'Rechnung', 'Vollmacht', 'Kuendigung', 'Vertrag'\n"
         f"Leerzeichen ersetzen durch: \"{space_replacement}\"\n"
-        f"Regeln: Umlaute ersetzen (ae/oe/ue/ss), max 120 Zeichen.\n"
+        f"Regeln: Umlaute ersetzen (ae/oe/ue/ss), max 120 Zeichen gesamt.\n"
         f"Nur den Dateinamen zurueckgeben (ohne .pdf), kein Erklaerungstext.\n\n"
         f"Beispiel-Output: {example}\n"
     )
@@ -509,7 +514,7 @@ def _via_claude(
             + f"\nOCR-Text:\n{text[:3000]}"
         )
         resp = client.messages.create(
-            model="claude-3-5-haiku-20241022",
+            model="claude-haiku-4-5-20251001",
             max_tokens=200,
             messages=[{"role": "user", "content": prompt}]
         )
