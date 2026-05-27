@@ -1069,23 +1069,31 @@ class SettingsDialog(ctk.CTkToplevel):
         self.cfg["space_replacement"] = "_" if sr.startswith("_") else "-"
 
         # Aktives Modell + API-Keys
-        # Schritt 1: direkt aus allen sichtbaren Entry-Feldern lesen
-        # (vor _capture_current_model_key, damit FocusOut-Placeholder nicht stört)
+        # Nur aus LEBENDIGEN Entry-Widgets lesen.
+        # Wurde ein Key bereits via '✓ Schlüssel speichern' in den Keyring geschrieben,
+        # ist das Entry-Widget danach ZERSTÖRT (winfo_exists() == False) → nicht anfassen,
+        # da sonst _model_keys["x"] == "" den gerade gespeicherten Key wieder löscht.
+        self.cfg["active_model"] = _MODEL_ID.get(self._om_active_model.get(), "rules")
         for m in ("claude", "openai", "gemini", "mistral", "groq"):
             entry = getattr(self, f"_entry_{m}", None)
-            if entry and not getattr(entry, "_placeholder_text_active", False):
-                try:
-                    raw = getattr(entry, "_entry", None)
-                    val = (raw.get() if raw is not None else entry.get()).strip()
-                    if val:
-                        self._model_keys[m] = val
-                except Exception:
-                    pass
-        # Schritt 2: aktuelles Modell per _capture_current_model_key sichern (Fallback)
-        self._capture_current_model_key()
-        self.cfg["active_model"] = _MODEL_ID.get(self._om_active_model.get(), "rules")
-        for m, key in self._model_keys.items():
-            config.set_model_key(m, key)
+            if entry is None:
+                continue  # Kein Entry → Masked-Preview war von Anfang an aktiv → nicht anfassen
+            try:
+                alive = entry.winfo_exists()
+            except Exception:
+                alive = False
+            if not alive:
+                continue  # Entry-Widget wurde durch _save_key_immediately ersetzt → nicht anfassen
+            # Entry lebendig: echter Inhalt oder Placeholder?
+            if getattr(entry, "_placeholder_text_active", False):
+                continue  # Placeholder aktiv → kein Key eingegeben → nicht anfassen
+            try:
+                raw = getattr(entry, "_entry", None)
+                val = (raw.get() if raw is not None else entry.get()).strip()
+            except Exception:
+                val = ""
+            if val:
+                config.set_model_key(m, val)
         ollama_var = getattr(self, "_var_ollama_model", None)
         self.cfg["ollama_model"] = ollama_var.get().strip() if ollama_var else self.cfg.get("ollama_model", "llama3.2")
 
