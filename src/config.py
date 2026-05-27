@@ -77,11 +77,12 @@ def get_model_key(model: str) -> str:
         return ""
 
 
-def set_model_key(model: str, key: str) -> None:
-    """API-Key eines Anbieters sicher im Windows Credential Manager speichern."""
+def set_model_key(model: str, key: str) -> str | None:
+    """API-Key eines Anbieters sicher im Windows Credential Manager speichern.
+    Gibt None bei Erfolg zurück, oder eine Fehlermeldung als String."""
     account = _KEY_ACCOUNTS.get(model, "")
     if not account:
-        return
+        return None
     try:
         if key:
             keyring.set_password(_SERVICE, account, key)
@@ -90,8 +91,9 @@ def set_model_key(model: str, key: str) -> None:
                 keyring.delete_password(_SERVICE, account)
             except Exception:
                 pass
-    except Exception:
-        pass
+    except Exception as exc:
+        return str(exc)
+    return None
 
 
 # Backward-Compat-Aliase (alter Code nutzte anthropic_key direkt)

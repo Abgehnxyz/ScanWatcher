@@ -415,10 +415,25 @@ class SettingsDialog(ctk.CTkToplevel):
         m = getattr(self, "_current_model", "rules")
         if m in ("rules", "ollama"):
             return
+        # Direkt vom Entry-Widget lesen (zuverlässiger als StringVar + show='*')
+        entry = getattr(self, f"_entry_{m}", None)
+        if entry:
+            # Kein Wert wenn Placeholder aktiv (FocusOut-Phantom)
+            if getattr(entry, "_placeholder_text_active", False):
+                return
+            try:
+                raw = getattr(entry, "_entry", None)
+                val = (raw.get() if raw is not None else entry.get()).strip()
+            except Exception:
+                val = ""
+            if val:
+                self._model_keys[m] = val
+                return
+        # Fallback: StringVar
         var = getattr(self, f"_var_{m}_key", None)
         if var:
             val = var.get().strip()
-            if val:  # nur überschreiben wenn wirklich etwas getippt wurde
+            if val:
                 self._model_keys[m] = val
 
     def _edit_model_key(self, model_key: str):
@@ -438,6 +453,28 @@ class SettingsDialog(ctk.CTkToplevel):
             config.set_model_key(model_key, "")
             self._rebuild_model_detail(self._current_model)
 
+    def _save_key_immediately(self, model_key: str, entry) -> None:
+        """'✓ Schlüssel speichern' geklickt: Key direkt aus Entry lesen und
+        sofort in den Windows Credential Manager schreiben. Umgeht alle
+        FocusOut/Placeholder-Probleme des Haupt-Speichern-Buttons."""
+        if getattr(entry, "_placeholder_text_active", False):
+            messagebox.showwarning("Leer", "Bitte zuerst einen API-Key einfügen.", parent=self)
+            return
+        try:
+            raw = getattr(entry, "_entry", None)
+            val = (raw.get() if raw is not None else entry.get()).strip()
+        except Exception:
+            val = ""
+        if not val:
+            messagebox.showwarning("Leer", "Bitte zuerst einen API-Key einfügen.", parent=self)
+            return
+        err = config.set_model_key(model_key, val)
+        if err:
+            messagebox.showerror("Fehler", f"Key konnte nicht gespeichert werden:\n{err}", parent=self)
+            return
+        self._model_keys[model_key] = val
+        self._rebuild_model_detail(self._current_model)
+
     def _toggle_key_visibility(self, model_key: str):
         """Auge-Toggle: Key im Klartext oder maskiert anzeigen."""
         entry = getattr(self, f"_entry_{model_key}", None)
@@ -450,6 +487,22 @@ class SettingsDialog(ctk.CTkToplevel):
         entry.configure(show="" if visible else "*")
         if btn:
             btn.configure(text="\U0001f648" if visible else "\U0001f441")
+
+    def _live_capture_key(self, model_key: str, entry) -> None:
+        """Liest den Key direkt aus dem Entry-Widget und speichert ihn sofort
+        in _model_keys. Wird bei Tastendruck, Paste und FocusOut aufgerufen,
+        damit der Wert unabhängig vom Haupt-Save-Button verfügbar ist."""
+        # Kein Wert speichern wenn Placeholder aktiv (FocusOut-Phantom)
+        if getattr(entry, "_placeholder_text_active", False):
+            return
+        try:
+            # CTkEntry: internen tkinter-Entry direkt ansprechen falls vorhanden
+            raw = getattr(entry, "_entry", None)
+            val = (raw.get() if raw is not None else entry.get()).strip()
+        except Exception:
+            val = ""
+        if val:
+            self._model_keys[model_key] = val
 
     def _rebuild_model_detail(self, model_key: str):
         for w in self._model_detail_frame.winfo_children():
@@ -501,27 +554,43 @@ class SettingsDialog(ctk.CTkToplevel):
 
             else:
                 # ── Kein Schlüssel: Eingabefeld anzeigen ──────────────────
-                var = tk.StringVar(value="")
-                setattr(self, f"_var_{model_key}_key", var)
-
                 entry_row = ctk.CTkFrame(p, fg_color="transparent")
                 entry_row.pack(fill="x", pady=(0, 4))
 
                 entry = ctk.CTkEntry(
-                    entry_row, textvariable=var, show="*", height=36,
+                    entry_row, show="*", height=36,
                     placeholder_text="API-Key einfügen  (Strg+V) ...",
                 )
                 entry.pack(side="left", fill="x", expand=True, padx=(0, 4))
                 entry.focus()
                 setattr(self, f"_entry_{model_key}", entry)
 
+                # Echtzeit-Capture: Paste + Tippen landen sofort in _model_keys
+                def _capture(event=None, mk=model_key, ew=entry):
+                    # Nach Paste 20 ms warten damit Tkinter den Text einfügt
+                    delay = 20 if event and event.type == "36" else 0
+                    self.after(delay, lambda: self._live_capture_key(mk, ew))
+
+                entry.bind("<KeyRelease>", _capture)
+                entry.bind("<<Paste>>",    lambda e, mk=model_key, ew=entry:
+                           self.after(20, lambda: self._live_capture_key(mk, ew)))
+                entry.bind("<FocusOut>",   _capture)
+
                 btn_eye = ctk.CTkButton(
                     entry_row, text="\U0001f441", width=36, height=36,
                     fg_color="#2a2a3a", hover_color="#3a3a4a",
                     command=lambda mk=model_key: self._toggle_key_visibility(mk),
                 )
-                btn_eye.pack(side="left")
+                btn_eye.pack(side="left", padx=(0, 4))
                 setattr(self, f"_btn_eye_{model_key}", btn_eye)
+
+                # Expliziter Speichern-Button: liest Entry direkt und schreibt in Keyring
+                ctk.CTkButton(
+                    entry_row, text="✓ Schlüssel speichern", height=36,
+                    fg_color="#1a4a1a", hover_color="#2a6a2a", text_color="#88ee88",
+                    border_width=1, border_color="#2a6a2a",
+                    command=lambda mk=model_key, ew=entry: self._save_key_immediately(mk, ew),
+                ).pack(side="left")
 
             ctk.CTkLabel(
                 p,
@@ -1000,6 +1069,19 @@ class SettingsDialog(ctk.CTkToplevel):
         self.cfg["space_replacement"] = "_" if sr.startswith("_") else "-"
 
         # Aktives Modell + API-Keys
+        # Schritt 1: direkt aus allen sichtbaren Entry-Feldern lesen
+        # (vor _capture_current_model_key, damit FocusOut-Placeholder nicht stört)
+        for m in ("claude", "openai", "gemini", "mistral", "groq"):
+            entry = getattr(self, f"_entry_{m}", None)
+            if entry and not getattr(entry, "_placeholder_text_active", False):
+                try:
+                    raw = getattr(entry, "_entry", None)
+                    val = (raw.get() if raw is not None else entry.get()).strip()
+                    if val:
+                        self._model_keys[m] = val
+                except Exception:
+                    pass
+        # Schritt 2: aktuelles Modell per _capture_current_model_key sichern (Fallback)
         self._capture_current_model_key()
         self.cfg["active_model"] = _MODEL_ID.get(self._om_active_model.get(), "rules")
         for m, key in self._model_keys.items():
