@@ -35,11 +35,24 @@ def _resolve_tesseract(tesseract_exe: str) -> str:
         return str(p)
     if getattr(sys, "frozen", False):
         base = Path(sys._MEIPASS)
+        resolved = base / tesseract_exe
+        if resolved.exists():
+            return str(resolved)
     else:
         base = Path(__file__).parent.parent
-    resolved = base / tesseract_exe
-    if resolved.exists():
-        return str(resolved)
+        resolved = base / tesseract_exe
+        if resolved.exists():
+            return str(resolved)
+        # Entwicklungsmodus: gängige Windows-Installationspfade als Fallback
+        for common in [
+            Path("C:/Program Files/Tesseract-OCR/tesseract.exe"),
+            Path("C:/Program Files (x86)/Tesseract-OCR/tesseract.exe"),
+        ]:
+            if common.exists():
+                log.debug(f"Tesseract gefunden: {common}")
+                return str(common)
+        # Letzter Fallback: System-PATH nutzen
+        return "tesseract"
     return tesseract_exe
 
 

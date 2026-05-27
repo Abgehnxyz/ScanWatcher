@@ -129,7 +129,7 @@ def process_file(path: str, cfg: dict, notify=None) -> bool:
 
         if text:
             model_keys = {
-                m: cfg.get(f"{m}_key", "")
+                m: config.get_model_key(m)
                 for m in ("claude", "openai", "gemini", "mistral", "groq")
             }
             pruefen_prefix = "PRUEFEN_" if ocr.needs_review(ocr_result) else ""
