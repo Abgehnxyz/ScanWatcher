@@ -398,9 +398,16 @@ def _build_prompt_header(name_template: str, date_format: str, space_replacement
         name_template, "2026-04-01", "inView", "Rechnung RE10154",
         date_format=date_format, space_replacement=space_replacement,
     )
+    heute = datetime.now()
+    heute_fmt = _format_date(heute.strftime("%Y-%m-%d"), date_format)
     return (
+        f"Heutiges Datum: {heute.strftime('%d.%m.%Y')}\n\n"
         f"Format-Template: {name_template}\n"
-        f"  DATUM    = Datum des Dokuments, Format: {date_format}\n"
+        f"  DATUM    = Ausstellungs-/Vertragsdatum des Dokuments, Format: {date_format}\n"
+        f"             NIEMALS Geburtsdatum, Zulassungsdatum, Erstzulassung,\n"
+        f"             Gueltigkeitsdatum, Faelligkeitsdatum oder Zeitraeume verwenden.\n"
+        f"             Wenn kein eindeutiges Ausstellungsdatum erkennbar ist,\n"
+        f"             das heutige Datum verwenden: {heute_fmt}\n"
         f"  ABSENDER = Firma oder Person, die das Dokument ausstellt.\n"
         f"             Kurz! Max. 2-3 Woerter. Nur der Name, keine Satzfragmente.\n"
         f"             Beispiel: 'Telekom', 'Finanzamt-Muenchen', 'AOK', 'Autotak'\n"
@@ -582,19 +589,36 @@ def _via_rules(
     )
 
 
+# Datumsangaben mit diesen Woertern davor sind keine Ausstellungsdaten.
+_DATE_BLOCK_RE = re.compile(
+    r"\b(geb|geb\.|geboren|geburtsdatum|geburtstag|"
+    r"erstzulassung|zulassung|zugelassen|ez|"
+    r"g(ue|ü)ltig( bis| ab)?|ablauf|f(ae|ä)llig(keit)?|"
+    r"t(ue|ü)v|hu|au)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_blocked_date(text: str, start: int) -> bool:
+    """True, wenn dem Datum an Position `start` ein Ausschluss-Wort vorausgeht."""
+    return bool(_DATE_BLOCK_RE.search(text[max(0, start - 40):start]))
+
+
 def _extract_date(text: str, original_filename: str) -> str:
     # DD.MM.YYYY
-    m = re.search(r"\b(\d{1,2})\.(\d{2})\.(\d{4})\b", text)
-    if m:
+    for m in re.finditer(r"\b(\d{1,2})\.(\d{2})\.(\d{4})\b", text):
+        if _is_blocked_date(text, m.start()):
+            continue
         return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
 
     # DD. Monatsname YYYY
-    m = re.search(
+    for m in re.finditer(
         r"\b(\d{1,2})\.\s*(Januar|Februar|März|Maerz|April|Mai|Juni|Juli|"
         r"August|September|Oktober|November|Dezember)\s+(\d{4})\b",
         text, re.IGNORECASE
-    )
-    if m:
+    ):
+        if _is_blocked_date(text, m.start()):
+            continue
         mo = MONATE.get(m.group(2)[:3].lower(), 0)
         if mo:
             return f"{m.group(3)}-{mo:02d}-{int(m.group(1)):02d}"
@@ -604,7 +628,7 @@ def _extract_date(text: str, original_filename: str) -> str:
     if len(stem) >= 8 and stem[:8].isdigit():
         return f"{stem[:4]}-{stem[4:6]}-{stem[6:8]}"
 
-    return datetime.now().strftime("%Y-%m")
+    return datetime.now().strftime("%Y-%m-%d")
 
 
 # Bekannte Institutionen/Marken – allgemeingültig, kein Personenbezug.
