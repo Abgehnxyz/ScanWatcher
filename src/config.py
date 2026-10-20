@@ -5,6 +5,8 @@
 @date    Mai 2026
 @brief   Konfigurationsverwaltung – laedt und speichert Einstellungen
          unter %%APPDATA%%\\ScanWatcher\\config.json, verwaltet Autostart-Registry.
+         API-Keys liegen ausschliesslich im Windows Credential Manager und
+         werden nur ueber get_model_key()/set_model_key() gelesen/geschrieben.
 """
 
 import json
@@ -16,7 +18,7 @@ from pathlib import Path
 import keyring
 
 
-CONFIG_VERSION = 2
+CONFIG_VERSION = 3
 
 DEFAULT_CONFIG = {
     "config_version": CONFIG_VERSION,
@@ -32,7 +34,9 @@ DEFAULT_CONFIG = {
     "date_format": "YYYY-MM-DD",
     "space_replacement": "-",
     "active_model": "rules",
+    "model_ids": {},
     "telemetry_asked": False,
+    "install_tracked": False,
     "last_heartbeat": "",
     "custom_senders": {},
     "custom_doc_types": {},
@@ -64,6 +68,7 @@ _KEY_ACCOUNTS = {
     "mistral": "mistral_api_key",
     "groq":    "groq_api_key",
 }
+KEY_MODELS = tuple(_KEY_ACCOUNTS)
 
 
 def get_model_key(model: str) -> str:
@@ -79,6 +84,7 @@ def get_model_key(model: str) -> str:
 
 def set_model_key(model: str, key: str) -> str | None:
     """API-Key eines Anbieters sicher im Windows Credential Manager speichern.
+    Leerer Key loescht den Eintrag.
     Gibt None bei Erfolg zurück, oder eine Fehlermeldung als String."""
     account = _KEY_ACCOUNTS.get(model, "")
     if not account:
@@ -96,12 +102,9 @@ def set_model_key(model: str, key: str) -> str | None:
     return None
 
 
-# Backward-Compat-Aliase (alter Code nutzte anthropic_key direkt)
-def get_anthropic_key() -> str:
-    return get_model_key("claude")
-
-def set_anthropic_key(key: str) -> None:
-    set_model_key("claude", key)
+def _strip_secrets(cfg: dict) -> dict:
+    """Entfernt alle *_key-Felder – Keys gehoeren nie in config.json."""
+    return {k: v for k, v in cfg.items() if not k.endswith("_key")}
 
 
 def load() -> dict:
@@ -116,10 +119,9 @@ def load() -> dict:
 
     # Migration: active_model aus alten Feldern ableiten
     if "active_model" not in data:
-        old_claude_key = get_model_key("claude")
         if data.get("ollama_enabled"):
             data["active_model"] = "ollama"
-        elif old_claude_key or data.get("anthropic_key"):
+        elif data.get("anthropic_key") or get_model_key("claude"):
             data["active_model"] = "claude"
         # else: DEFAULT_CONFIG liefert "rules"
 
@@ -127,7 +129,6 @@ def load() -> dict:
     if data.get("anthropic_key"):
         if not get_model_key("claude"):
             set_model_key("claude", data["anthropic_key"])
-        del data["anthropic_key"]
 
     # Migration: source_folder/target_folder → folder_profiles
     if not data.get("folder_profiles") and data.get("source_folder"):
@@ -137,27 +138,22 @@ def load() -> dict:
             "target": data.get("target_folder", ""),
         }]
 
-    cfg = {**DEFAULT_CONFIG, **data}
+    cfg = {**DEFAULT_CONFIG, **_strip_secrets(data)}
     cfg["config_version"] = CONFIG_VERSION  # immer auf aktueller Version halten
 
-    # Alle Model-Keys aus Credential Manager laden
-    for model in _KEY_ACCOUNTS:
-        cfg[f"{model}_key"] = get_model_key(model)
+    # Autostart: Die Registry ist die Wahrheit (der Installer setzt den Eintrag,
+    # ohne config.json zu kennen). Sonst wuerde das erste save() ihn loeschen.
+    cfg["autostart"] = is_autostart_enabled()
 
     return cfg
 
 
 def save(cfg: dict) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    # Alle API-Keys sicher speichern – nicht in JSON
-    for model in _KEY_ACCOUNTS:
-        key_field = f"{model}_key"
-        if key_field in cfg:
-            set_model_key(model, cfg.get(key_field, ""))
-    # Nicht-serialisierbare Felder ausschliessen
-    to_save = {k: v for k, v in cfg.items() if not k.endswith("_key")}
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(to_save, f, indent=2, ensure_ascii=False)
+    tmp = CONFIG_FILE.with_suffix(".json.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(_strip_secrets(cfg), f, indent=2, ensure_ascii=False)
+    os.replace(tmp, CONFIG_FILE)
     _apply_autostart(cfg.get("autostart", False))
 
 
@@ -166,21 +162,35 @@ def get_log_path() -> Path:
     return CONFIG_DIR / "scan_watcher.log"
 
 
-def _apply_autostart(enabled: bool) -> None:
-    """Autostart-Eintrag in der Windows-Registry setzen oder entfernen."""
+def _autostart_command() -> str:
+    """Startbefehl fuer den Run-Key – EXE im Build, pythonw + run.py in der Entwicklung."""
+    if getattr(sys, "frozen", False):
+        return f'"{sys.executable}"'
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    exe = pythonw if pythonw.exists() else Path(sys.executable)
+    run_py = Path(__file__).resolve().parent.parent / "run.py"
+    return f'"{exe}" "{run_py}"'
+
+
+def is_autostart_enabled() -> bool:
     try:
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER, _REG_KEY,
-            0, winreg.KEY_SET_VALUE
-        )
-        if enabled:
-            exe = sys.executable if getattr(sys, "frozen", False) else sys.executable
-            winreg.SetValueEx(key, _REG_NAME, 0, winreg.REG_SZ, f'"{exe}"')
-        else:
-            try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _REG_KEY) as key:
+            winreg.QueryValueEx(key, _REG_NAME)
+        return True
+    except OSError:
+        return False
+
+
+def _apply_autostart(enabled: bool) -> None:
+    """Autostart-Eintrag setzen oder entfernen – nur bei tatsaechlicher Aenderung,
+    damit ein vorhandener Installer-Eintrag nicht ueberschrieben wird."""
+    try:
+        if enabled == is_autostart_enabled():
+            return
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _REG_KEY, 0, winreg.KEY_SET_VALUE) as key:
+            if enabled:
+                winreg.SetValueEx(key, _REG_NAME, 0, winreg.REG_SZ, _autostart_command())
+            else:
                 winreg.DeleteValue(key, _REG_NAME)
-            except FileNotFoundError:
-                pass
-        winreg.CloseKey(key)
-    except Exception:
+    except OSError:
         pass
