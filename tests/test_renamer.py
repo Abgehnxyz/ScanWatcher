@@ -3,15 +3,21 @@ Tests fuer renamer.py
 Ausfuehren: py -m pytest tests/
 """
 
+import ast
+import collections
+import io
+import json
 import sys
+import urllib.error
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.renamer import (
-    apply_template, clean, unique_path,
+    BEKANNTE_BRANCHEN, apply_template, clean, determine_name,
+    determine_name_with_source, unique_path,
     _extract_date, _extract_sender, _extract_subject,
-    _format_date, _via_rules,
+    _format_date, _parse_fields, _via_rules,
     _extract_bewerber_name, _extract_bewerbung_stelle,
 )
 
@@ -219,49 +225,160 @@ def test_via_rules_full_pipeline():
     assert "HUK" in result or "Rechnung" in result
 
 
-# ------------------------------------------------------ Mock: _via_ollama()
+# --------------------------------------------------------- KI: Antworten
 
-def test_via_ollama_success():
-    from src.renamer import _via_ollama
-    mock_resp = MagicMock()
-    mock_resp.read.return_value = b'{"response": "2026-05-08_TestFirma_Rechnung"}'
-    mock_resp.__enter__ = lambda s: s
-    mock_resp.__exit__ = MagicMock(return_value=False)
-
-    with patch("urllib.request.urlopen", return_value=mock_resp):
-        result = _via_ollama("OCR-Text", "001.pdf", "llama3.2")
-    assert result == "2026-05-08_TestFirma_Rechnung"
+def _http_resp(payload: dict) -> MagicMock:
+    resp = MagicMock()
+    resp.read.return_value = json.dumps(payload).encode("utf-8")
+    resp.__enter__ = lambda s: s
+    resp.__exit__ = MagicMock(return_value=False)
+    return resp
 
 
-def test_via_ollama_network_error():
-    from src.renamer import _via_ollama
+def _claude_resp(text: str, stop_reason: str = "end_turn") -> MagicMock:
+    thinking = MagicMock(type="thinking")
+    block = MagicMock(type="text", text=text)
+    return MagicMock(stop_reason=stop_reason, content=[thinking, block])
+
+
+_OCR = "HUK-COBURG Versicherung\nDatum: 08.05.2026\nRechnung Nr. RE-99001"
+_FIELDS_JSON = '{"datum": "2026-05-08", "absender": "HUK Coburg", "betreff": "Rechnung"}'
+
+
+def test_parse_fields_tolerates_code_fences():
+    raw = "```json\n" + _FIELDS_JSON + "\n```"
+    assert _parse_fields(raw) == {"datum": "2026-05-08", "absender": "HUK Coburg", "betreff": "Rechnung"}
+
+
+def test_parse_fields_rejects_garbage():
+    assert _parse_fields("") is None
+    assert _parse_fields("2026-05-08_Firma_Rechnung") is None
+    assert _parse_fields('{"datum": "", "absender": "", "betreff": ""}') is None
+
+
+def test_ai_name_is_built_locally_from_template():
+    with patch("urllib.request.urlopen", return_value=_http_resp({"response": _FIELDS_JSON})):
+        name, used = determine_name_with_source(
+            _OCR, "001.pdf", active_model="ollama",
+            name_template="{JAHR}/{DATUM}_{ABSENDER}_{BETREFF}",
+        )
+    assert used == "ollama"
+    assert name == "2026/2026-05-08_HUK-Coburg_Rechnung"
+
+
+def test_ai_output_cannot_escape_target_folder():
+    """Prompt-Injection im Brief: KI liefert Pfad-Tricks → werden entschärft."""
+    evil = '{"datum": "2026-05-08", "absender": "..\\\\..\\\\Windows", "betreff": "../../x\\n:*?"}'
+    with patch("urllib.request.urlopen", return_value=_http_resp({"response": evil})):
+        name = determine_name(_OCR, "001.pdf", active_model="ollama")
+    assert ".." not in name and "\\" not in name and "/" not in name
+    assert ":" not in name and "\n" not in name
+
+
+def test_ai_invalid_date_falls_back_to_rules_date():
+    fields = '{"datum": "08.05.2026", "absender": "HUK", "betreff": "Rechnung"}'
+    with patch("urllib.request.urlopen", return_value=_http_resp({"response": fields})):
+        name = determine_name(_OCR, "001.pdf", active_model="ollama")
+    assert name.startswith("2026-05-08_")
+
+
+def test_custom_sender_overrides_ai():
+    with patch("urllib.request.urlopen", return_value=_http_resp({"response": _FIELDS_JSON})):
+        name = determine_name(_OCR, "001.pdf", active_model="ollama",
+                              custom_senders={"huk-coburg": "Kfz-Versicherung"})
+    assert "_Kfz-Versicherung_" in name
+
+
+def test_ollama_network_error_falls_back_to_rules():
     with patch("urllib.request.urlopen", side_effect=OSError("connection refused")):
-        result = _via_ollama("OCR-Text", "001.pdf", "llama3.2")
-    assert result is None
+        name, used = determine_name_with_source(_OCR, "20260508001.pdf", active_model="ollama")
+    assert used == "rules"
+    assert name.startswith("2026-05-08_")
 
 
-# ------------------------------------------------------ Mock: _via_claude()
+def test_claude_uses_structured_output_and_current_model():
+    client = MagicMock()
+    client.messages.create.return_value = _claude_resp(_FIELDS_JSON)
+    with patch("anthropic.Anthropic", return_value=client):
+        name, used = determine_name_with_source(
+            _OCR, "001.pdf", active_model="claude", model_keys={"claude": "sk-ant-test"},
+        )
+    kwargs = client.messages.create.call_args.kwargs
+    assert kwargs["model"] == "claude-haiku-5-5"
+    assert kwargs["output_config"]["format"]["type"] == "json_schema"
+    assert kwargs["output_config"]["effort"] == "low"
+    assert "temperature" not in kwargs        # Haiku 5.5: 400 bei temperature != 1
+    assert used == "claude"
+    assert name == "2026-05-08_HUK-Coburg_Rechnung"
 
-def test_via_claude_success():
-    from src.renamer import _via_claude
-    mock_text = MagicMock()
-    mock_text.text = "2026-05-08_Allianz_Police"
-    mock_resp = MagicMock()
-    mock_resp.content = [mock_text]
 
-    mock_client = MagicMock()
-    mock_client.messages.create.return_value = mock_resp
-
-    with patch("anthropic.Anthropic", return_value=mock_client):
-        result = _via_claude("OCR-Text", "001.pdf", "sk-ant-test")
-    assert result == "2026-05-08_Allianz_Police"
+def test_claude_model_id_override():
+    client = MagicMock()
+    client.messages.create.return_value = _claude_resp(_FIELDS_JSON)
+    with patch("anthropic.Anthropic", return_value=client):
+        determine_name(_OCR, "001.pdf", active_model="claude",
+                       model_keys={"claude": "k"}, model_ids={"claude": "claude-sonnet-5-5"})
+    assert client.messages.create.call_args.kwargs["model"] == "claude-sonnet-5-5"
 
 
-def test_via_claude_api_error():
-    from src.renamer import _via_claude
+def test_claude_refusal_falls_back_to_rules():
+    client = MagicMock()
+    client.messages.create.return_value = _claude_resp("", stop_reason="refusal")
+    with patch("anthropic.Anthropic", return_value=client):
+        _, used = determine_name_with_source(
+            _OCR, "001.pdf", active_model="claude", model_keys={"claude": "k"},
+        )
+    assert used == "rules"
+
+
+def test_claude_api_error_falls_back_to_rules():
     with patch("anthropic.Anthropic", side_effect=Exception("unauthorized")):
-        result = _via_claude("OCR-Text", "001.pdf", "bad-key")
-    assert result is None
+        _, used = determine_name_with_source(
+            _OCR, "001.pdf", active_model="claude", model_keys={"claude": "bad"},
+        )
+    assert used == "rules"
+
+
+def test_missing_key_uses_rules():
+    _, used = determine_name_with_source(_OCR, "001.pdf", active_model="openai", model_keys={})
+    assert used == "rules"
+
+
+def test_openai_retries_without_json_mode_on_400():
+    calls = []
+
+    def fake_urlopen(req, timeout=0):
+        body = json.loads(req.data)
+        calls.append(body)
+        if "response_format" in body:
+            raise urllib.error.HTTPError(req.full_url, 400, "bad", {}, io.BytesIO(b"no json mode"))
+        return _http_resp({"choices": [{"message": {"content": _FIELDS_JSON}}]})
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        _, used = determine_name_with_source(
+            _OCR, "001.pdf", active_model="openai", model_keys={"openai": "sk-test"},
+        )
+    assert used == "openai"
+    assert len(calls) == 2
+    assert "max_completion_tokens" in calls[0]   # neue OpenAI-Modelle kennen max_tokens nicht
+
+
+def test_gemini_key_in_header_not_url():
+    seen = {}
+
+    def fake_urlopen(req, timeout=0):
+        seen["url"] = req.full_url
+        seen["key"] = req.get_header("X-goog-api-key")
+        return _http_resp({"candidates": [{"content": {"parts": [{"text": _FIELDS_JSON}]}}]})
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        _, used = determine_name_with_source(
+            _OCR, "001.pdf", active_model="gemini", model_keys={"gemini": "AIza-secret"},
+        )
+    assert used == "gemini"
+    assert "AIza-secret" not in seen["url"]
+    assert seen["key"] == "AIza-secret"
+    assert "gemini-1.5" not in seen["url"]
 
 
 # ------------------------------------------------- Bewerbungs-Erkennung ----
@@ -368,3 +485,93 @@ def test_subject_kuendigung_als_ganzes_wort():
     text = "Kündigung des Mobilfunkvertrages"
     assert _extract_subject(text) == "Kuendigung"
 
+
+
+# ------------------------------------- Regressionen: Absender-Falschtreffer
+
+def test_sender_not_taken_from_body_with_common_words():
+    """Alltagswörter wie "Netto", "das", "UPS" sind keine Firmennamen."""
+    cases = {
+        "Müller Haustechnik\nHauptstr. 5\n79100 Freiburg\nRechnung Nr. 2026-117\nSumme Netto 100,00 EUR":
+            "Mueller-Haustechnik",
+        "Schreinerei Huber\nSehr geehrter Herr Muster,\nanbei erhalten Sie das Angebot für Ihre Küche.":
+            "Schreinerei-Huber",
+        "Elektro Schmid\nLieferschein 4711\nVersand via UPS":
+            "Elektro-Schmid",
+    }
+    for text, expected in cases.items():
+        assert _extract_sender(text) == expected
+
+
+def test_sender_brand_in_body_line_returns_short_name():
+    """Steht die Marke mitten in einem Satz, nicht die ganze Zeile übernehmen."""
+    text = "Ihr Vertrag\nwir danken Ihnen für Ihr Vertrauen in die Allianz und melden uns."
+    assert _extract_sender(text) == "Allianz"
+
+
+def test_sender_specific_entry_beats_generic():
+    """Früher gewann "aok" vor "aok nordwest" allein durch die Dict-Reihenfolge."""
+    text = "AOK NordWest · Postfach 1 · 44000 Dortmund\nIhr Beitragsbescheid"
+    assert _extract_sender(text) == "AOK-NordWest"
+
+
+def test_sender_word_boundaries():
+    """Teilwörter treffen nicht: "Telekommunikation" ist nicht Telekom,
+    "27 Zoll" ist keine Zollbehörde."""
+    assert _extract_sender("Meier IT\nTelekommunikationsanlage Wartung") != "Telekom"
+    assert _extract_sender("Monitor Shop\nBildschirm 27 Zoll") != "Zoll"
+
+
+def test_company_suffix_needs_whole_word():
+    """" eg" darf nicht in " egal" treffen."""
+    text = "Das ist egal und so weiter\nKunde 4711"
+    assert _extract_sender(text) != "Das-ist-egal-und-so-weiter"
+
+
+def test_branchen_keys_unique_and_lowercase():
+    """Doppelte Schlüssel überschreiben sich stillschweigend – per AST prüfen."""
+    tree = ast.parse(Path(__file__).parent.parent.joinpath("src", "renamer.py").read_text("utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict) \
+                and isinstance(node.targets[0], ast.Name) \
+                and node.targets[0].id in ("MONATE", "BEKANNTE_BEHOERDEN", "DOKUMENTTYPEN", "BEKANNTE_BRANCHEN"):
+            keys = [k.value for k in node.value.keys]
+            dupes = [k for k, c in collections.Counter(keys).items() if c > 1]
+            assert not dupes, f"{node.targets[0].id}: doppelte Schlüssel {dupes}"
+            assert all(k == k.lower() for k in keys), node.targets[0].id
+    for word in ("netto", "das", "real", "ups", "otto", "sky", "wise", "ergo", "uber", "zoll"):
+        assert word not in BEKANNTE_BRANCHEN
+
+
+def test_date_block_only_same_line():
+    """Ein "fällig" in der Vorzeile darf das Briefdatum nicht sperren."""
+    text = "Betrag fällig\n12.03.2026"
+    assert _extract_date(text, "x.pdf") == "2026-03-12"
+    assert _extract_date("geb. 01.02.1980\nFreiburg, 05.06.2026", "x.pdf") == "2026-06-05"
+
+
+def test_mahnstufe_recognized():
+    assert _extract_subject("Ihre Kundennummer 1\n2. Mahnung\nBitte zahlen Sie") == "2-Mahnung"
+
+
+# ------------------------------------------------------ Template-Erweiterungen
+
+def test_apply_template_subfolders():
+    result = apply_template("{JAHR}/{MONAT}/{DATUM}_{ABSENDER}", "2026-05-08", "Allianz", "Police")
+    assert result == "2026/05/2026-05-08_Allianz"
+
+
+def test_apply_template_english_tokens():
+    result = apply_template("{DATE}_{SENDER}_{SUBJECT}", "2026-05-08", "Apple", "Invoice")
+    assert result == "2026-05-08_Apple_Invoice"
+
+
+def test_apply_template_never_empty():
+    assert apply_template("{UNBEKANNT}", "2026-05-08", "", "", original_stem="20260508001") == "20260508001"
+    assert apply_template("", "2026-05-08", "", "") == "Dokument"
+
+
+def test_apply_template_no_traversal_or_reserved_names():
+    result = apply_template("../{ABSENDER}/CON", "2026-05-08", "X", "Y")
+    assert ".." not in result.split("/")
+    assert result.split("/")[-1].lower() != "con"
