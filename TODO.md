@@ -53,7 +53,8 @@
 - [x] **Namensmuster** konfigurierbar: aktuell nur rein numerisch; freies Regex möglich machen
 - [x] **OCR-Seitenzahl** in Einstellungen: wie viele Seiten sollen gelesen werden (Standard: 2)
 - [x] **Stabilitäts-Timeout** in Einstellungen: wie lange auf stabile Dateigröße warten (Standard: 30s)
-- [x] Duplikat-Strategie wählbar: `_2`-Suffix / Datum anhängen / überschreiben
+- [x] Duplikat-Strategie wählbar: `_2`-Suffix / überschreiben
+- [ ] Duplikat-Strategie „Datum anhängen“
 
 ### UI / UX
 - [x] **Dark/Light-Mode** Umschalter (customtkinter unterstützt beides)
@@ -107,6 +108,10 @@
 ---
 
 ## 🔧 Technische Schulden
+
+- [ ] Installer signieren (Code Signing, z. B. Azure Trusted Signing / SignPath für OSS) – SHA256 schützt nur vor Übertragungsfehlern, nicht vor einem manipulierten Release
+- [ ] Installer: Autostart-Eintrag landet bei „Als Administrator ausführen“ mit anderem Konto im HKCU des Admins
+- [ ] Telemetrie-Server: prüfen, dass Webserver-/Proxy-Logs keine IP-Adressen speichern (Zusage im Einwilligungsdialog)
 
 - [x] Unit-Tests für `_via_ollama()` und `_via_claude()` (Mock-HTTP)
 - [x] Unit-Tests für Benennungsschema-Templates (wenn implementiert)

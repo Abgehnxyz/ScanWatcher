@@ -14,12 +14,16 @@
 
 ## What it does
 
-Scan Watcher runs silently in the Windows system tray and watches a folder. When your scanner drops a new PDF with a generic filename like `SCAN_20260512_143201.pdf`, Scan Watcher reads it via OCR, identifies the sender and document type, and renames it automatically.
+Scan Watcher runs silently in the Windows system tray and watches a folder. When your scanner drops a new file with a generic numeric name like `20260512143201.pdf`, Scan Watcher reads it via OCR, identifies the sender and document type, and renames it automatically.
 
 **Example:**
 ```
-SCAN_20260512_143201.pdf  →  2026-05-08_Apple_Invoice.pdf
+20260512143201.pdf  →  2026-05-08_Apple_Rechnung.pdf
 ```
+
+By default only purely numeric file names are picked up. If your scanner uses a different naming scheme (e.g. `SCAN_20260512_143201.pdf`), set a matching regular expression under *Settings → Watcher → Name pattern*, for example `SCAN_\d+_\d+`.
+
+Document types and the user interface are in German.
 
 ---
 
@@ -27,14 +31,14 @@ SCAN_20260512_143201.pdf  →  2026-05-08_Apple_Invoice.pdf
 
 | Feature | Description |
 |---------|-------------|
-| **OCR** | pdfplumber (text layer) + Tesseract (scanned images) with image preprocessing |
-| **AI renaming** | Claude, GPT-4o-mini, Gemini, Mistral, Groq or local Ollama models |
-| **Rule-based** | Works without AI – recognizes 250+ senders, dates and document types |
-| **Custom schema** | Fully configurable naming template: `{DATE}_{SENDER}_{SUBJECT}` |
+| **OCR** | pdfplumber (text layer) + bundled Tesseract (scanned images, multi-page TIFF) with image preprocessing |
+| **AI renaming** | Claude, OpenAI, Gemini, Mistral, Groq or local Ollama models – the AI only extracts date, sender and subject; the file name is always built locally |
+| **Rule-based** | Works without AI – recognizes 500+ senders, dates and document types |
+| **Custom schema** | Configurable naming template with sub-folders, e.g. `{JAHR}/{DATUM}_{ABSENDER}_{BETREFF}` |
 | **Multiple profiles** | Watch multiple source→target folder pairs simultaneously |
 | **Confidence check** | Low-confidence OCR results get a `PRUEFEN_` prefix automatically |
-| **System tray** | Runs in the background with a tray icon and status display |
-| **Auto-updater** | Checks for new releases on startup, in-app installer download |
+| **System tray** | Runs in the background with a tray icon and status display, dark and light mode |
+| **Auto-updater** | Checks GitHub for new releases, downloads the installer and verifies its SHA-256 checksum |
 | **Telemetry** | GDPR-compliant, anonymous opt-in, disabled by default |
 
 ---
@@ -45,43 +49,67 @@ SCAN_20260512_143201.pdf  →  2026-05-08_Apple_Invoice.pdf
 2. Run `ScanWatcher_Setup_vX.X.X.exe`
 3. Scan Watcher starts automatically after installation
 
-**Requirements:** Windows 10/11 (64-bit) — no additional software needed, everything is bundled.
+**Requirements:** Windows 10/11 (64-bit) — no additional software needed, Tesseract OCR is bundled.
+
+---
+
+## Naming template
+
+| Token | Alias | Example |
+|-------|-------|---------|
+| `{DATUM}` | `{DATE}` | `2026-05-08` (format selectable) |
+| `{JAHR}` / `{MONAT}` / `{TAG}` | `{YEAR}` / `{MONTH}` / `{DAY}` | `2026` / `05` / `08` |
+| `{ABSENDER}` | `{SENDER}` | `Telekom` |
+| `{BETREFF}` | `{SUBJECT}` | `Rechnung` |
+| `{ORIGINAL}` | – | original file name without extension |
+
+A `/` in the template creates sub-folders: `{JAHR}/{MONAT}/{DATUM}_{ABSENDER}` → `2026/05/2026-05-08_Telekom.pdf`.
+
+---
+
+## AI models
+
+| Mode | Default model | Cost | Internet | Setup |
+|------|---------------|------|----------|-------|
+| **Rule-based** | – | free | no | none |
+| **Ollama (local)** | `llama3.2` (configurable) | free | no | [Install Ollama](https://ollama.com) |
+| **Claude** | `claude-haiku-5-5` | < $0.001/doc | yes | [API key](https://console.anthropic.com) |
+| **OpenAI** | `gpt-6-luna` | see OpenAI pricing | yes | [API key](https://platform.openai.com) |
+| **Gemini** | `gemini-flash-latest` | free tier | yes | [API key](https://aistudio.google.com) |
+| **Mistral** (EU) | `mistral-small-latest` | ~$0.001/doc | yes | [API key](https://console.mistral.ai) |
+| **Groq** | `openai/gpt-oss-20b` | free tier | yes | [API key](https://console.groq.com) |
+
+The model ID of every cloud provider can be overridden in the settings – useful when a provider retires a model before the next Scan Watcher release.
+
+API keys are stored encrypted in the **Windows Credential Manager**, never in `config.json`. If an AI request fails (no credit, network error, refusal), Scan Watcher falls back to the rule-based naming and logs a warning.
+
+---
+
+## Privacy
+
+- **Telemetry** is opt-in and disabled by default. When enabled, Scan Watcher sends the app version, Windows build, the naming mode used and success/failure counts – never file names or contents.
+- **Notices** (e.g. about critical bug fixes) are fetched from the Nova Network server only when telemetry is enabled.
+- **Update checks** contact the GitHub API and can be disabled in the settings.
+- **AI renaming** sends the OCR text (up to 6,000 characters) to the selected provider. Use the rule-based mode or Ollama to keep everything local.
 
 ---
 
 ## Development setup
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.14
 - [Tesseract-OCR for Windows](https://github.com/UB-Mannheim/tesseract/wiki) (including German language pack)
 
 ### Setup
 ```powershell
 git clone https://github.com/Abgehnxyz/ScanWatcher.git
 cd ScanWatcher
-py -m pip install -r requirements.txt
+py -m pip install -r requirements-dev.txt
+py -m pytest tests/
 py run.py
 ```
 
-On first run, the settings dialog opens automatically.
-
----
-
-## AI models
-
-Scan Watcher supports the following renaming modes:
-
-| Mode | Cost | Internet | Setup |
-|------|------|----------|-------|
-| **Rule-based** | free | no | none |
-| **Ollama (local)** | free | no | [Install Ollama](https://ollama.com) |
-| **Claude (Haiku)** | ~$0.001/doc | yes | [API key](https://console.anthropic.com) |
-| **GPT-4o-mini** | ~$0.001/doc | yes | [API key](https://platform.openai.com) |
-| **Gemini Flash** | free tier | yes | [API key](https://aistudio.google.com) |
-| **Mistral Small** | ~$0.001/doc | yes | [API key](https://console.mistral.ai) |
-| **Groq** | free tier | yes | [API key](https://console.groq.com) |
-
-API keys are stored encrypted in the **Windows Credential Manager**.
+On first run, the settings dialog opens automatically. `py run_dev.py dialog|renamer|consent` starts single components.
 
 ---
 
@@ -91,11 +119,15 @@ API keys are stored encrypted in the **Windows Credential Manager**.
 build.bat
 ```
 
+The version is read from `src/__init__.py` (single source of truth). The script runs the tests, bundles Tesseract including its DLLs and builds the installer.
+
 Output:
 - `dist/ScanWatcher/ScanWatcher.exe`
 - `dist/installer/ScanWatcher_Setup_vX.X.X.exe`
 
 Requires [Inno Setup 6](https://jrsoftware.org/isdl.php) for the installer.
+
+**Releases:** bump `__version__` in `src/__init__.py`, commit, then push a matching tag (`git tag v1.0.19 && git push --tags`). The GitHub workflow checks that tag and version match, runs the tests and publishes the installer with its SHA-256 checksum.
 
 ---
 
@@ -115,26 +147,27 @@ All settings are accessible via the settings dialog (tray icon → right-click �
 ```
 scan-watcher/
 ├── .github/workflows/
-│   └── release.yml        # Auto-build on tag push
+│   └── release.yml        # Test, build and release on tag push
 ├── src/
 │   ├── main.py            # Entry point
-│   ├── tray.py            # System tray & UI
+│   ├── ui.py              # Single Tk thread for all windows
+│   ├── theme.py           # Dark/light color palette
+│   ├── tray.py            # System tray & windows
 │   ├── settings_dialog.py # Settings dialog
-│   ├── watcher.py         # File watcher (watchdog)
+│   ├── watcher.py         # File watcher (watchdog) + worker pool
 │   ├── ocr.py             # OCR (pdfplumber + Tesseract + PIL)
 │   ├── renamer.py         # Naming logic (rules + AI)
 │   ├── updater.py         # GitHub update check
 │   ├── telemetry.py       # Anonymous opt-in telemetry
 │   └── config.py          # Configuration management
 ├── assets/
-│   └── icon.png
 ├── installer/
 │   └── setup.iss          # Inno Setup script
 ├── tests/
-│   └── test_renamer.py
 ├── run.py
 ├── build.bat
-└── requirements.txt
+├── requirements.txt       # Runtime dependencies (pinned)
+└── requirements-dev.txt   # Build and test dependencies
 ```
 
 ---

@@ -1,0 +1,4 @@
+# Build und Tests (nicht Teil der App)
+-r requirements.txt
+pyinstaller==6.20.0
+pytest==9.0.3

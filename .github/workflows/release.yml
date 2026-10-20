@@ -24,13 +24,26 @@ jobs:
           $version = "${{ github.ref_name }}".TrimStart('v')
           "VERSION=$version" | Out-File -Append -FilePath $env:GITHUB_ENV
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.14
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.14'
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
+
+      - name: Check tag matches app version
+        shell: pwsh
+        run: |
+          $appVersion = (py -c "from src import __version__; print(__version__)").Trim()
+          $tagVersion = $env:VERSION -replace '-.*$', ''
+          if ($appVersion -ne $tagVersion) {
+            Write-Error "Tag v$env:VERSION passt nicht zu src/__init__.py (__version__ = $appVersion)"
+            exit 1
+          }
+
+      - name: Run tests
+        run: py -m pytest tests/ -q
 
       - name: Install Tesseract
         shell: pwsh
@@ -56,10 +69,18 @@ jobs:
             --icon assets\icon.ico `
             --add-data "assets;assets" `
             "--add-data=$tess\tesseract.exe;tesseract" `
+            "--add-data=$tess\*.dll;tesseract" `
             "--add-data=$tess\tessdata\deu.traineddata;tesseract/tessdata" `
             "--add-data=$tess\tessdata\eng.traineddata;tesseract/tessdata" `
             --collect-data customtkinter `
             run.py
+
+      - name: Smoke-test bundled Tesseract (ohne System-Installation im PATH)
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\Windows\System32;C:\Windows"
+          & "dist\ScanWatcher\_internal\tesseract\tesseract.exe" --list-langs
+          if ($LASTEXITCODE -ne 0) { Write-Error "Gebuendeltes Tesseract startet nicht ($LASTEXITCODE)"; exit 1 }
 
       - name: Build Installer with Inno Setup
         shell: pwsh
