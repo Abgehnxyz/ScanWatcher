@@ -7,23 +7,21 @@
          KI-Modell-Auswahl, Benennungsschema, Autostart- und Benachrichtigungs-Toggles.
 """
 
+import re
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
-from . import config
-
-ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
+from . import config, renamer, theme
 
 _MODEL_OPTIONS = [
     ("rules",   "Keines – Regelwerk (offline)"),
     ("claude",  "Claude Haiku (Anthropic)"),
-    ("openai",  "GPT-4o-mini (OpenAI)"),
+    ("openai",  "OpenAI"),
     ("gemini",  "Gemini Flash (Google)"),
     ("mistral", "Mistral Small (EU-Server)"),
-    ("groq",    "Llama 3.1 via Groq"),
+    ("groq",    "Groq (sehr schnell)"),
     ("ollama",  "Ollama (lokal, kein Internet)"),
 ]
 _MODEL_ID      = {display: key for key, display in _MODEL_OPTIONS}
@@ -43,43 +41,43 @@ _MODEL_DETAIL = {
         "has_key": False,
         "info":  "Umbenennung per Regelwerk – erkennt Datum, Absender und Betreff aus dem OCR-Text.",
         "info2": "Kein Internet, keine Kosten.",
-        "color": "#666",
+        "color": theme.SUBTLE,
     },
     "claude": {
         "has_key": True,
-        "hint":    "API-Key: console.anthropic.com  |  ~$0.001/Dok. (claude-3-5-haiku)",
+        "hint":    "API-Key: console.anthropic.com  |  unter $0.001/Dok.",
         "warning": "OCR-Text wird an US-Server (Anthropic) uebermittelt.",
-        "color":   "#e07020",
+        "color":   theme.WARN,
     },
     "openai": {
         "has_key": True,
-        "hint":    "API-Key: platform.openai.com  |  ~$0.0002/Dok. (gpt-4o-mini)",
+        "hint":    "API-Key: platform.openai.com  |  Preise: openai.com/api/pricing",
         "warning": "OCR-Text wird an US-Server (OpenAI) uebermittelt.",
-        "color":   "#e07020",
+        "color":   theme.WARN,
     },
     "gemini": {
         "has_key": True,
-        "hint":    "API-Key: aistudio.google.com  |  Kostenloser Tier: 1.500 Anfragen/Tag",
+        "hint":    "API-Key: aistudio.google.com  |  Kostenloses Kontingent verfügbar",
         "warning": "OCR-Text wird an US-Server (Google) uebermittelt.",
-        "color":   "#e07020",
+        "color":   theme.WARN,
     },
     "mistral": {
         "has_key": True,
         "hint":    "API-Key: console.mistral.ai  |  ~$0.001/Dok. – EU-Server (DSGVO-freundlich)",
         "warning": "OCR-Text wird an EU-Server (Mistral AI, Frankreich) uebermittelt.",
-        "color":   "#4488cc",
+        "color":   theme.INFO,
     },
     "groq": {
         "has_key": True,
-        "hint":    "API-Key: console.groq.com  |  Kostenloser Tier, sehr schnell",
+        "hint":    "API-Key: console.groq.com  |  Kostenloses Kontingent, sehr schnell",
         "warning": "OCR-Text wird an US-Server (Groq) uebermittelt.",
-        "color":   "#e07020",
+        "color":   theme.WARN,
     },
     "ollama": {
         "has_key": False,
         "info":  "Laeuft lokal auf Port 11434 – kein Internet, keine Kosten.",
         "info2": "Installieren: ollama.com  |  Modell laden: ollama pull llama3.2",
-        "color": "#4488cc",
+        "color": theme.INFO,
     },
 }
 
@@ -91,17 +89,21 @@ class SettingsDialog(ctk.CTkToplevel):
         self.on_save = on_save
         self.version = version
         self.result = None
+        # Eigene Modell-IDs pro Anbieter (leer = Standard aus renamer)
+        self._model_id_vars = {
+            m: tk.StringVar(master=self, value=self.cfg.get("model_ids", {}).get(m, ""))
+            for m in config.KEY_MODELS
+        }
 
-        self.title("Scan Watcher – Einstellungen")
+        theme.prepare_window(self, "Scan Watcher – Einstellungen")
         self.resizable(False, False)
         self._build_ui()
         self._center()
 
     def _build_ui(self):
-        self.configure(fg_color="#141420")
 
         # Header
-        header = ctk.CTkFrame(self, fg_color="#0a0a14", corner_radius=0, height=64)
+        header = ctk.CTkFrame(self, fg_color=theme.HEADER, corner_radius=0, height=64)
         header.pack(fill="x")
         header.pack_propagate(False)
 
@@ -109,7 +111,7 @@ class SettingsDialog(ctk.CTkToplevel):
             header,
             text="⚙  Scan Watcher",
             font=ctk.CTkFont(size=18, weight="bold"),
-            text_color="white",
+            text_color=theme.TEXT,
         ).pack(side="left", padx=(20, 6))
 
         if self.version:
@@ -117,7 +119,7 @@ class SettingsDialog(ctk.CTkToplevel):
                 header,
                 text=f"v{self.version}",
                 font=ctk.CTkFont(size=11),
-                text_color="#888",
+                text_color=theme.MUTED,
             ).pack(side="left", pady=(6, 0))
 
         ctk.CTkButton(
@@ -125,7 +127,7 @@ class SettingsDialog(ctk.CTkToplevel):
             text="☕ Unterstützen",
             font=ctk.CTkFont(size=11),
             width=130, height=32,
-            fg_color="#29abe0", hover_color="#1a8fbf", text_color="white",
+            fg_color=theme.KOFI, hover_color=theme.KOFI_HOVER, text_color="white",
             command=lambda: __import__("webbrowser").open("https://ko-fi.com/novanetwork"),
         ).pack(side="right", padx=16)
 
@@ -133,17 +135,17 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self._profiles_section(main)
 
-        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=(0, 16))
+        ctk.CTkFrame(main, height=1, fg_color=theme.DIVIDER).pack(fill="x", pady=(0, 16))
         self._naming_section(main)
-        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+        ctk.CTkFrame(main, height=1, fg_color=theme.DIVIDER).pack(fill="x", pady=16)
         self._model_section(main)
-        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+        ctk.CTkFrame(main, height=1, fg_color=theme.DIVIDER).pack(fill="x", pady=16)
         self._senders_section(main)
-        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+        ctk.CTkFrame(main, height=1, fg_color=theme.DIVIDER).pack(fill="x", pady=16)
         self._doc_types_section(main)
-        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+        ctk.CTkFrame(main, height=1, fg_color=theme.DIVIDER).pack(fill="x", pady=16)
         self._watcher_section(main)
-        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+        ctk.CTkFrame(main, height=1, fg_color=theme.DIVIDER).pack(fill="x", pady=16)
 
         # Toggles
         self._var_autostart = tk.BooleanVar(value=self.cfg.get("autostart", False))
@@ -154,15 +156,20 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self._option_row(main, "Log-Level (Protokollierung)", "log_level", ["INFO", "DEBUG", "WARNING"])
 
-        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
-
-        # Telemetrie
+        # Darstellung
         ctk.CTkLabel(
-            main,
-            text="Nutzungsstatistiken",
+            main, text="Darstellung", anchor="w",
             font=ctk.CTkFont(size=12, weight="bold"),
-            anchor="w",
-        ).pack(fill="x", pady=(0, 4))
+        ).pack(fill="x", pady=(8, 4))
+        self._om_appearance = ctk.CTkOptionMenu(
+            main, values=list(theme.APPEARANCE_MODES.values()), height=36,
+        )
+        self._om_appearance.set(
+            theme.APPEARANCE_MODES.get(self.cfg.get("appearance_mode", "dark"), "Dunkel")
+        )
+        self._om_appearance.pack(fill="x", pady=(0, 4))
+
+        ctk.CTkFrame(main, height=1, fg_color=theme.DIVIDER).pack(fill="x", pady=16)
 
         # Update-Einstellungen
         ctk.CTkLabel(
@@ -200,14 +207,22 @@ class SettingsDialog(ctk.CTkToplevel):
         self._btn_check_now.pack(side="left")
         self._lbl_check_result = ctk.CTkLabel(
             row_now, text="", font=ctk.CTkFont(size=11),
-            anchor="w", text_color="#a0a0b0",
+            anchor="w", text_color=theme.MUTED,
         )
         self._lbl_check_result.pack(side="left", padx=(12, 0))
 
-        ctk.CTkFrame(main, height=1, fg_color="#2a2a3a").pack(fill="x", pady=16)
+        ctk.CTkFrame(main, height=1, fg_color=theme.DIVIDER).pack(fill="x", pady=16)
+
+        # Telemetrie
+        ctk.CTkLabel(
+            main,
+            text="Nutzungsstatistiken",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
 
         self._var_telemetry = tk.BooleanVar(value=self.cfg.get("telemetry_enabled", False))
-        row_tel = ctk.CTkFrame(main, fg_color="#1e1e2e", corner_radius=8)
+        row_tel = ctk.CTkFrame(main, fg_color=theme.SURFACE, corner_radius=8)
         row_tel.pack(fill="x", pady=(0, 4))
         ctk.CTkLabel(row_tel, text="Anonyme Nutzungsstatistiken senden", anchor="w").pack(
             side="left", padx=16, pady=12
@@ -218,15 +233,16 @@ class SettingsDialog(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             main,
-            text="  Kein Personenbezug. Nur: App-Version, genutztes Modell, Erfolg/Fehler.",
+            text="  Kein Personenbezug. Nur: App-Version, genutztes Modell, Erfolg/Fehler.\n"
+                 "  Mit Zustimmung werden auch Hinweise von unserem Server abgerufen.",
             font=ctk.CTkFont(size=10),
-            text_color="#4488cc",
+            text_color=theme.INFO,
             anchor="w",
             wraplength=460,
         ).pack(fill="x", pady=(0, 12))
 
         # Footer
-        footer = ctk.CTkFrame(self, fg_color="#0a0a14", corner_radius=0, height=60)
+        footer = ctk.CTkFrame(self, fg_color=theme.HEADER, corner_radius=0, height=60)
         footer.pack(fill="x", side="bottom")
         footer.pack_propagate(False)
 
@@ -236,20 +252,23 @@ class SettingsDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             footer, text="Abbrechen", width=100, height=36,
-            fg_color="transparent", border_width=1, border_color="#444",
-            hover_color="#2a2a3a", command=self.destroy,
+            fg_color="transparent", border_width=1, border_color=theme.BORDER,
+            text_color=theme.TEXT,
+            hover_color=theme.DIVIDER, command=self.destroy,
         ).pack(side="right", pady=12)
 
         ctk.CTkButton(
             footer, text="Importieren", width=100, height=36,
-            fg_color="transparent", border_width=1, border_color="#444",
-            hover_color="#2a2a3a", command=self._import_settings,
+            fg_color="transparent", border_width=1, border_color=theme.BORDER,
+            text_color=theme.TEXT,
+            hover_color=theme.DIVIDER, command=self._import_settings,
         ).pack(side="left", padx=(20, 4), pady=12)
 
         ctk.CTkButton(
             footer, text="Exportieren", width=100, height=36,
-            fg_color="transparent", border_width=1, border_color="#444",
-            hover_color="#2a2a3a", command=self._export_settings,
+            fg_color="transparent", border_width=1, border_color=theme.BORDER,
+            text_color=theme.TEXT,
+            hover_color=theme.DIVIDER, command=self._export_settings,
         ).pack(side="left", padx=(0, 4), pady=12)
 
     # --------------------------------------------------------- Scroll-Bereich
@@ -259,7 +278,7 @@ class SettingsDialog(ctk.CTkToplevel):
         container = ctk.CTkFrame(self, fg_color="transparent")
         container.pack(fill="both", expand=True)
 
-        canvas = tk.Canvas(container, bg="#141420", highlightthickness=0, bd=0)
+        canvas = tk.Canvas(container, bg=theme.resolve(theme.BG), highlightthickness=0, bd=0)
         sb = ctk.CTkScrollbar(container, command=canvas.yview)
         sb.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
@@ -274,11 +293,25 @@ class SettingsDialog(ctk.CTkToplevel):
                     lambda e: canvas.itemconfigure(win_id, width=e.width))
 
         def _scroll(e):
+            # Nur Ereignisse aus diesem Dialog – andere Fenster teilen sich den Tk-Thread
+            if not str(getattr(e, "widget", "")).startswith(str(self)):
+                return
             canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
 
-        # Scroll nur aktiv solange Dialog offen
-        self.bind_all("<MouseWheel>", _scroll)
-        self.bind("<Destroy>", lambda e: self.unbind_all("<MouseWheel>"))
+        # bind_all wirkt app-weit: eigene Bindung anhaengen (add="+") und beim
+        # Schliessen gezielt nur diese wieder entfernen. Toplevel-Bindungen auf
+        # <Destroy> feuern auch fuer jedes Kind-Widget – daher e.widget pruefen.
+        funcid = self.bind_all("<MouseWheel>", _scroll, add="+")
+
+        def _unbind(e):
+            if e.widget is not self:
+                return
+            script = self.tk.call("bind", "all", "<MouseWheel>")
+            kept = "\n".join(l for l in str(script).split("\n") if funcid not in l)
+            self.tk.call("bind", "all", "<MouseWheel>", kept)
+            self.deletecommand(funcid)
+
+        self.bind("<Destroy>", _unbind, add="+")
 
         # Padding-Wrapper – entspricht dem früheren padx=24, pady=20
         padded = ctk.CTkFrame(inner, fg_color="transparent")
@@ -299,7 +332,7 @@ class SettingsDialog(ctk.CTkToplevel):
             parent,
             text="  Jeder Eintrag überwacht einen eigenen Eingangsordner gleichzeitig.",
             font=ctk.CTkFont(size=10),
-            text_color="#666",
+            text_color=theme.SUBTLE,
             anchor="w",
         ).pack(fill="x", pady=(0, 8))
 
@@ -319,14 +352,15 @@ class SettingsDialog(ctk.CTkToplevel):
             text="+ Profil hinzufügen",
             height=32,
             fg_color="transparent",
+            text_color=theme.TEXT,
             border_width=1,
-            border_color="#444",
-            hover_color="#2a2a3a",
+            border_color=theme.BORDER,
+            hover_color=theme.DIVIDER,
             command=lambda: self._add_profile_row("", "", ""),
         ).pack(anchor="w", pady=(6, 0))
 
     def _add_profile_row(self, name: str = "", source: str = "", target: str = ""):
-        outer = ctk.CTkFrame(self._profile_rows_frame, fg_color="#1e1e2e", corner_radius=8)
+        outer = ctk.CTkFrame(self._profile_rows_frame, fg_color=theme.SURFACE, corner_radius=8)
         outer.pack(fill="x", pady=(0, 6))
 
         header = ctk.CTkFrame(outer, fg_color="transparent")
@@ -343,7 +377,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             header, text="✕", width=28, height=28,
-            fg_color="transparent", hover_color="#3a2a2a", text_color="#cc4444",
+            fg_color="transparent", hover_color=theme.DANGER_HOVER, text_color=theme.DANGER,
             command=lambda e=entry: self._remove_profile_row(e),
         ).pack(side="right", padx=(8, 0))
 
@@ -358,7 +392,7 @@ class SettingsDialog(ctk.CTkToplevel):
                 side="left", fill="x", expand=True, padx=(4, 4))
             ctk.CTkButton(
                 r, text="...", width=34, height=30,
-                command=lambda v=var: v.set(filedialog.askdirectory() or v.get()),
+                command=lambda v=var: v.set(filedialog.askdirectory(parent=self) or v.get()),
             ).pack(side="right")
             return var
 
@@ -526,29 +560,29 @@ class SettingsDialog(ctk.CTkToplevel):
 
             if existing_key:
                 # ── Schlüssel vorhanden: Masked-Preview-Zeile ──────────────
-                key_row = ctk.CTkFrame(p, fg_color="#151f15", corner_radius=6)
+                key_row = ctk.CTkFrame(p, fg_color=theme.OK_BG, corner_radius=6)
                 key_row.pack(fill="x", pady=(0, 4))
 
                 ctk.CTkLabel(
                     key_row,
                     text=f"\U0001f511  {_mask_key(existing_key)}",
                     font=ctk.CTkFont(size=11, family="Courier New"),
-                    text_color="#55cc55",
+                    text_color=theme.OK,
                     anchor="w",
                 ).pack(side="left", padx=(12, 0), pady=8)
 
                 ctk.CTkButton(
                     key_row, text="Löschen", width=78, height=28,
                     fg_color="transparent", border_width=1,
-                    border_color="#663333", hover_color="#3a1a1a",
-                    text_color="#cc4444",
+                    border_color=theme.DANGER, hover_color=theme.DANGER_HOVER,
+                    text_color=theme.DANGER,
                     command=lambda mk=model_key: self._delete_model_key(mk),
                 ).pack(side="right", padx=(4, 8), pady=8)
 
                 ctk.CTkButton(
                     key_row, text="Ändern", width=78, height=28,
-                    fg_color="transparent", border_width=1,
-                    border_color="#444", hover_color="#2a2a3a",
+                    fg_color="transparent", border_width=1, text_color=theme.TEXT,
+                    border_color=theme.BORDER, hover_color=theme.DIVIDER,
                     command=lambda mk=model_key: self._edit_model_key(mk),
                 ).pack(side="right", padx=(4, 0), pady=8)
 
@@ -578,7 +612,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
                 btn_eye = ctk.CTkButton(
                     entry_row, text="\U0001f441", width=36, height=36,
-                    fg_color="#2a2a3a", hover_color="#3a3a4a",
+                    fg_color=theme.DIVIDER, hover_color=theme.HOVER_STRONG,
                     command=lambda mk=model_key: self._toggle_key_visibility(mk),
                 )
                 btn_eye.pack(side="left", padx=(0, 4))
@@ -587,8 +621,8 @@ class SettingsDialog(ctk.CTkToplevel):
                 # Expliziter Speichern-Button: liest Entry direkt und schreibt in Keyring
                 ctk.CTkButton(
                     entry_row, text="✓ Schlüssel speichern", height=36,
-                    fg_color="#1a4a1a", hover_color="#2a6a2a", text_color="#88ee88",
-                    border_width=1, border_color="#2a6a2a",
+                    fg_color=theme.SAVE_BG, hover_color=theme.SAVE_HOVER, text_color=theme.SAVE_TEXT,
+                    border_width=1, border_color=theme.SAVE_HOVER,
                     command=lambda mk=model_key, ew=entry: self._save_key_immediately(mk, ew),
                 ).pack(side="left")
 
@@ -596,7 +630,7 @@ class SettingsDialog(ctk.CTkToplevel):
                 p,
                 text=f"  {d['hint']}",
                 font=ctk.CTkFont(size=10),
-                text_color="#4488cc",
+                text_color=theme.INFO,
                 anchor="w",
                 wraplength=460,
             ).pack(fill="x")
@@ -608,6 +642,17 @@ class SettingsDialog(ctk.CTkToplevel):
                 anchor="w",
                 wraplength=460,
             ).pack(fill="x", pady=(0, 4))
+
+            # Modell-ID optional ueberschreiben – falls ein Anbieter sein
+            # Standardmodell abschaltet, ohne auf ein Update zu warten
+            id_row = ctk.CTkFrame(p, fg_color="transparent")
+            id_row.pack(fill="x", pady=(4, 4))
+            ctk.CTkLabel(id_row, text="Modell-ID", width=80, anchor="w",
+                         font=ctk.CTkFont(size=11)).pack(side="left")
+            ctk.CTkEntry(
+                id_row, textvariable=self._model_id_vars[model_key], height=30,
+                placeholder_text=f"Standard: {renamer.DEFAULT_MODEL_IDS[model_key]}",
+            ).pack(side="left", fill="x", expand=True)
 
         else:  # rules
             ctk.CTkLabel(
@@ -641,9 +686,10 @@ class SettingsDialog(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             parent,
-            text="  Tokens: {DATUM}  {JAHR}  {MONAT}  {TAG}  {ABSENDER}  {BETREFF}  {ORIGINAL}",
+            text="  Tokens: {DATUM}  {JAHR}  {MONAT}  {TAG}  {ABSENDER}  {BETREFF}  {ORIGINAL}\n"
+                 "  \"/\" legt Unterordner an, z. B. {JAHR}/{MONAT}/{DATUM}_{ABSENDER}",
             font=ctk.CTkFont(size=10),
-            text_color="#666",
+            text_color=theme.SUBTLE,
             anchor="w",
         ).pack(fill="x", pady=(0, 10))
 
@@ -675,16 +721,16 @@ class SettingsDialog(ctk.CTkToplevel):
         self._om_space_replacement.set("_ (Unterstrich)" if current_sr == "_" else "- (Bindestrich)")
         self._om_space_replacement.pack(fill="x")
 
-        preview_frame = ctk.CTkFrame(parent, fg_color="#1e1e2e", corner_radius=8)
+        preview_frame = ctk.CTkFrame(parent, fg_color=theme.SURFACE, corner_radius=8)
         preview_frame.pack(fill="x", pady=(10, 0))
         ctk.CTkLabel(
             preview_frame, text="Vorschau:",
-            font=ctk.CTkFont(size=10), text_color="#888", anchor="w",
+            font=ctk.CTkFont(size=10), text_color=theme.MUTED, anchor="w",
         ).pack(side="left", padx=(12, 6), pady=10)
         self._preview_label = ctk.CTkLabel(
             preview_frame, text="",
             font=ctk.CTkFont(size=11, family="Courier New"),
-            text_color="#88ccff", anchor="w",
+            text_color=theme.ACCENT_TEXT, anchor="w",
         )
         self._preview_label.pack(side="left", fill="x", expand=True, padx=(0, 12), pady=10)
 
@@ -692,7 +738,6 @@ class SettingsDialog(ctk.CTkToplevel):
         self._update_preview()
 
     def _update_preview(self):
-        from . import renamer
         template = self._var_name_template.get() or "{DATUM}_{ABSENDER}_{BETREFF}"
         date_format = self._om_date_format.get()
         sr = self._om_space_replacement.get()
@@ -725,11 +770,11 @@ class SettingsDialog(ctk.CTkToplevel):
             parent,
             text="  Suchbegriff im OCR-Text → Anzeigename  (Vorrang vor eingebautem Regelwerk)",
             font=ctk.CTkFont(size=10),
-            text_color="#666",
+            text_color=theme.SUBTLE,
             anchor="w",
         ).pack(fill="x", pady=(0, 8))
 
-        self._sender_rows_frame = tk.Frame(parent, background="#141420", bd=0, highlightthickness=0)
+        self._sender_rows_frame = tk.Frame(parent, background=theme.resolve(theme.BG), bd=0, highlightthickness=0)
         self._sender_rows_frame.pack(fill="x")
 
         self._sender_rows: list[tuple] = []
@@ -742,14 +787,15 @@ class SettingsDialog(ctk.CTkToplevel):
             text="+ Eintrag hinzufügen",
             height=32,
             fg_color="transparent",
+            text_color=theme.TEXT,
             border_width=1,
-            border_color="#444",
-            hover_color="#2a2a3a",
+            border_color=theme.BORDER,
+            hover_color=theme.DIVIDER,
             command=lambda: self._add_sender_row("", ""),
         ).pack(anchor="w", pady=(6, 0))
 
     def _add_sender_row(self, key: str = "", value: str = ""):
-        row = ctk.CTkFrame(self._sender_rows_frame, fg_color="#1e1e2e", corner_radius=8)
+        row = ctk.CTkFrame(self._sender_rows_frame, fg_color=theme.SURFACE, corner_radius=8)
         row.pack(fill="x", pady=(0, 4))
 
         kv = tk.StringVar(value=key)
@@ -759,7 +805,7 @@ class SettingsDialog(ctk.CTkToplevel):
             row, textvariable=kv, height=32, placeholder_text="Suchbegriff…"
         ).pack(side="left", fill="x", expand=True, padx=(8, 4), pady=6)
 
-        ctk.CTkLabel(row, text="→", text_color="#888", width=20).pack(side="left", padx=2)
+        ctk.CTkLabel(row, text="→", text_color=theme.MUTED, width=20).pack(side="left", padx=2)
 
         ctk.CTkEntry(
             row, textvariable=vv, height=32, placeholder_text="Anzeigename…"
@@ -770,7 +816,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             row, text="✕", width=32, height=32,
-            fg_color="transparent", hover_color="#3a2a2a", text_color="#cc4444",
+            fg_color="transparent", hover_color=theme.DANGER_HOVER, text_color=theme.DANGER,
             command=lambda t=entry: self._remove_sender_row(t),
         ).pack(side="right", padx=(0, 6), pady=6)
 
@@ -793,11 +839,11 @@ class SettingsDialog(ctk.CTkToplevel):
             parent,
             text="  Suchbegriff im OCR-Text → Anzeigename  (Vorrang vor eingebautem Regelwerk)",
             font=ctk.CTkFont(size=10),
-            text_color="#666",
+            text_color=theme.SUBTLE,
             anchor="w",
         ).pack(fill="x", pady=(0, 8))
 
-        self._doc_type_rows_frame = tk.Frame(parent, background="#141420", bd=0, highlightthickness=0)
+        self._doc_type_rows_frame = tk.Frame(parent, background=theme.resolve(theme.BG), bd=0, highlightthickness=0)
         self._doc_type_rows_frame.pack(fill="x")
 
         self._doc_type_rows: list[tuple] = []
@@ -810,14 +856,15 @@ class SettingsDialog(ctk.CTkToplevel):
             text="+ Eintrag hinzufügen",
             height=32,
             fg_color="transparent",
+            text_color=theme.TEXT,
             border_width=1,
-            border_color="#444",
-            hover_color="#2a2a3a",
+            border_color=theme.BORDER,
+            hover_color=theme.DIVIDER,
             command=lambda: self._add_doc_type_row("", ""),
         ).pack(anchor="w", pady=(6, 0))
 
     def _add_doc_type_row(self, key: str = "", value: str = ""):
-        row = ctk.CTkFrame(self._doc_type_rows_frame, fg_color="#1e1e2e", corner_radius=8)
+        row = ctk.CTkFrame(self._doc_type_rows_frame, fg_color=theme.SURFACE, corner_radius=8)
         row.pack(fill="x", pady=(0, 4))
 
         kv = tk.StringVar(value=key)
@@ -827,7 +874,7 @@ class SettingsDialog(ctk.CTkToplevel):
             row, textvariable=kv, height=32, placeholder_text="Suchbegriff…"
         ).pack(side="left", fill="x", expand=True, padx=(8, 4), pady=6)
 
-        ctk.CTkLabel(row, text="→", text_color="#888", width=20).pack(side="left", padx=2)
+        ctk.CTkLabel(row, text="→", text_color=theme.MUTED, width=20).pack(side="left", padx=2)
 
         ctk.CTkEntry(
             row, textvariable=vv, height=32, placeholder_text="Anzeigename…"
@@ -838,7 +885,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             row, text="✕", width=32, height=32,
-            fg_color="transparent", hover_color="#3a2a2a", text_color="#cc4444",
+            fg_color="transparent", hover_color=theme.DANGER_HOVER, text_color=theme.DANGER,
             command=lambda t=entry: self._remove_doc_type_row(t),
         ).pack(side="right", padx=(0, 6), pady=6)
 
@@ -863,7 +910,7 @@ class SettingsDialog(ctk.CTkToplevel):
             font=ctk.CTkFont(size=11), anchor="w",
         ).pack(fill="x", pady=(0, 4))
 
-        exts_frame = ctk.CTkFrame(parent, fg_color="#1e1e2e", corner_radius=8)
+        exts_frame = ctk.CTkFrame(parent, fg_color=theme.SURFACE, corner_radius=8)
         exts_frame.pack(fill="x", pady=(0, 8))
 
         current_exts = [e.lower() for e in self.cfg.get("watch_extensions", [".pdf"])]
@@ -934,7 +981,7 @@ class SettingsDialog(ctk.CTkToplevel):
         ctk.CTkLabel(
             parent,
             text="  Leer = UNLESBAR_-Dateien bleiben im Eingangsordner",
-            font=ctk.CTkFont(size=10), text_color="#666", anchor="w",
+            font=ctk.CTkFont(size=10), text_color=theme.SUBTLE, anchor="w",
         ).pack(fill="x", pady=(0, 4))
 
     # --------------------------------------------------------- Hilfs-Methoden
@@ -957,7 +1004,7 @@ class SettingsDialog(ctk.CTkToplevel):
         ctk.CTkButton(
             row, text="...", width=42, height=36,
             command=lambda v=var: v.set(
-                filedialog.askdirectory(initialdir=v.get() or "/") or v.get()
+                filedialog.askdirectory(parent=self, initialdir=v.get() or "/") or v.get()
             ),
         ).pack(side="right")
 
@@ -979,50 +1026,42 @@ class SettingsDialog(ctk.CTkToplevel):
         self._btn_check_now.configure(state="disabled", text="Prüfe…")
         self._lbl_check_result.configure(text="")
         channel = "beta" if self._om_update_channel.get().startswith("Beta") else "stable"
+        result: dict = {}
 
-        def on_update(release: dict):
-            tag = release.get("tag_name", "?")
-            self.after(0, lambda: [
-                self._btn_check_now.configure(state="normal", text="Jetzt auf Updates prüfen"),
-                self._lbl_check_result.configure(text="", text_color="#a0a0b0"),
+        def _run():                      # Hintergrund-Thread: nur Netzwerk, kein Tk
+            try:
+                result["release"] = updater.fetch_latest(channel)
+            except Exception as e:
+                result["error"] = e
+            result["done"] = True
+
+        def _poll():                     # UI-Thread
+            if not self.winfo_exists():
+                return
+            if "done" not in result:
+                self.after(200, _poll)
+                return
+            self._btn_check_now.configure(state="normal", text="Jetzt auf Updates prüfen")
+            release = result.get("release")
+            if "error" in result:
+                self._lbl_check_result.configure(text="Verbindungsfehler", text_color="#f44336")
+            elif updater.is_newer(release, self.version):
+                self._lbl_check_result.configure(text="")
                 messagebox.showinfo(
                     "Update verfügbar",
-                    f"Version {tag} ist verfügbar!\n\nBitte starte Scan Watcher neu – der Update-Dialog erscheint dann automatisch.",
+                    f"Version {release['tag_name']} ist verfügbar!\n\nBitte starte Scan Watcher neu – "
+                    "der Update-Dialog erscheint dann automatisch.",
                     parent=self,
-                ),
-            ])
-
-        def _run():
-            import urllib.request, json
-            _API = ("https://api.github.com/repos/Abgehnxyz/ScanWatcher/releases"
-                    if channel == "beta"
-                    else "https://api.github.com/repos/Abgehnxyz/ScanWatcher/releases/latest")
-            _HEADERS = {"Accept": "application/vnd.github+json", "User-Agent": "ScanWatcher"}
-            try:
-                req = urllib.request.Request(_API, headers=_HEADERS)
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
-                release = data[0] if channel == "beta" else data
-                tag = release.get("tag_name", "")
-                from . import updater as _u
-                if tag and _u._parse_version(tag) > _u._parse_version(self.version):
-                    on_update(release)
-                else:
-                    self.after(0, lambda: [
-                        self._btn_check_now.configure(state="normal", text="Jetzt auf Updates prüfen"),
-                        self._lbl_check_result.configure(text=f"✓ Aktuell ({self.version})", text_color="#4caf50"),
-                    ])
-            except Exception as e:
-                self.after(0, lambda: [
-                    self._btn_check_now.configure(state="normal", text="Jetzt auf Updates prüfen"),
-                    self._lbl_check_result.configure(text="Verbindungsfehler", text_color="#f44336"),
-                ])
+                )
+            else:
+                self._lbl_check_result.configure(text=f"✓ Aktuell ({self.version})", text_color="#4caf50")
 
         import threading
         threading.Thread(target=_run, daemon=True).start()
+        self.after(200, _poll)
 
     def _toggle_row(self, parent: ctk.CTkFrame, label: str, var: tk.BooleanVar):
-        row = ctk.CTkFrame(parent, fg_color="#1e1e2e", corner_radius=8)
+        row = ctk.CTkFrame(parent, fg_color=theme.SURFACE, corner_radius=8)
         row.pack(fill="x", pady=4)
         ctk.CTkLabel(row, text=label, anchor="w").pack(side="left", padx=16, pady=12)
         ctk.CTkSwitch(
@@ -1063,18 +1102,22 @@ class SettingsDialog(ctk.CTkToplevel):
             "beta" if self._om_update_channel.get().startswith("Beta") else "stable"
         )
         self.cfg["telemetry_enabled"]    = self._var_telemetry.get()
+        modes = {label: key for key, label in theme.APPEARANCE_MODES.items()}
+        self.cfg["appearance_mode"]      = modes.get(self._om_appearance.get(), "dark")
         self.cfg["name_template"]     = self._var_name_template.get().strip() or "{DATUM}_{ABSENDER}_{BETREFF}"
         self.cfg["date_format"]       = self._om_date_format.get()
         sr = self._om_space_replacement.get()
         self.cfg["space_replacement"] = "_" if sr.startswith("_") else "-"
 
         # Aktives Modell + API-Keys
-        # Nur aus LEBENDIGEN Entry-Widgets lesen.
-        # Wurde ein Key bereits via '✓ Schlüssel speichern' in den Keyring geschrieben,
-        # ist das Entry-Widget danach ZERSTÖRT (winfo_exists() == False) → nicht anfassen,
-        # da sonst _model_keys["x"] == "" den gerade gespeicherten Key wieder löscht.
+        # Keys gehen direkt in den Credential Manager (config.save() fasst sie
+        # nicht an). Nur aus LEBENDIGEN Entry-Widgets mit echtem Inhalt lesen –
+        # nach '✓ Schlüssel speichern' oder 'Löschen' ist das Entry ersetzt.
         self.cfg["active_model"] = _MODEL_ID.get(self._om_active_model.get(), "rules")
-        for m in ("claude", "openai", "gemini", "mistral", "groq"):
+        self.cfg["model_ids"] = {
+            m: v.get().strip() for m, v in self._model_id_vars.items() if v.get().strip()
+        }
+        for m in config.KEY_MODELS:
             entry = getattr(self, f"_entry_{m}", None)
             if entry is None:
                 continue  # Kein Entry → Masked-Preview war von Anfang an aktiv → nicht anfassen
@@ -1120,7 +1163,18 @@ class SettingsDialog(ctk.CTkToplevel):
         if self._var_ext_tiff.get():  exts.extend([".tiff", ".tif"])
         if self._var_ext_png.get():   exts.append(".png")
         self.cfg["watch_extensions"]   = exts or [".pdf"]
-        self.cfg["name_pattern"]       = self._var_name_pattern.get().strip()
+        pattern = self._var_name_pattern.get().strip()
+        if pattern:
+            try:
+                re.compile(pattern)
+            except re.error as e:
+                messagebox.showerror(
+                    "Ungültiges Namensmuster",
+                    f"Das Namensmuster ist kein gültiger regulärer Ausdruck:\n{e}",
+                    parent=self,
+                )
+                return
+        self.cfg["name_pattern"]       = pattern
         self.cfg["ocr_max_pages"]      = int(self._om_ocr_max_pages.get())
         self.cfg["stability_timeout"]  = int(self._om_stability_timeout.get())
         ds = self._om_duplicate_strategy.get()
@@ -1129,7 +1183,8 @@ class SettingsDialog(ctk.CTkToplevel):
         self.cfg["unlesbar_folder"] = unlesbar_var.get().strip() if unlesbar_var else ""
 
         if not self.cfg.get("folder_profiles"):
-            messagebox.showerror("Fehler", "Bitte mindestens einen Eingangsordner angeben.")
+            messagebox.showerror("Fehler", "Bitte mindestens einen Eingangsordner angeben.",
+                                 parent=self)
             return
 
         config.save(self.cfg)
@@ -1141,6 +1196,7 @@ class SettingsDialog(ctk.CTkToplevel):
     def _export_settings(self):
         import json
         path = filedialog.asksaveasfilename(
+            parent=self,
             defaultextension=".json",
             filetypes=[("JSON", "*.json"), ("Alle Dateien", "*.*")],
             initialfile="scanwatcher_einstellungen.json",
@@ -1152,13 +1208,19 @@ class SettingsDialog(ctk.CTkToplevel):
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(to_export, f, indent=2, ensure_ascii=False)
-            messagebox.showinfo("Exportiert", f"Einstellungen gespeichert:\n{path}")
+            messagebox.showinfo("Exportiert", f"Einstellungen gespeichert:\n{path}", parent=self)
         except Exception as e:
-            messagebox.showerror("Fehler", f"Export fehlgeschlagen:\n{e}")
+            messagebox.showerror("Fehler", f"Export fehlgeschlagen:\n{e}", parent=self)
+
+    # Nur Einstellungen uebernehmen – keine internen Zustandsfelder
+    # (Einwilligung, Heartbeat, MOTD …) und keine unbekannten Schluessel.
+    _IMPORT_SKIP = {"config_version", "telemetry_asked", "install_tracked",
+                    "last_heartbeat", "last_motd_id", "autostart"}
 
     def _import_settings(self):
         import json
         path = filedialog.askopenfilename(
+            parent=self,
             filetypes=[("JSON", "*.json"), ("Alle Dateien", "*.*")],
             title="Einstellungen importieren",
         )
@@ -1167,14 +1229,22 @@ class SettingsDialog(ctk.CTkToplevel):
         try:
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("Keine gültige Einstellungsdatei.")
         except Exception as e:
-            messagebox.showerror("Fehler", f"Import fehlgeschlagen:\n{e}")
+            messagebox.showerror("Fehler", f"Import fehlgeschlagen:\n{e}", parent=self)
             return
-        merged = {**self.cfg, **{k: v for k, v in data.items() if not k.endswith("_key")}}
+        imported = {
+            k: v for k, v in data.items()
+            if k in config.DEFAULT_CONFIG and k not in self._IMPORT_SKIP
+            and isinstance(v, type(config.DEFAULT_CONFIG[k]))
+        }
+        merged = {**self.cfg, **imported}
         config.save(merged)
         if self.on_save:
             self.on_save(merged)
-        messagebox.showinfo("Importiert", "Einstellungen importiert und gespeichert.")
+        messagebox.showinfo("Importiert", f"{len(imported)} Einstellungen importiert und gespeichert.",
+                            parent=self)
         self.destroy()
 
     def _center(self):

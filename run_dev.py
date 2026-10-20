@@ -10,20 +10,20 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 def run_dialog():
     """Nur den Einstellungs-Dialog oeffnen (kein Tray, kein Mutex)."""
-    import customtkinter as ctk
     from src import config
     from src.settings_dialog import SettingsDialog
+    from src.ui import UiThread
 
     cfg = config.load()
+    ui = UiThread(cfg.get("appearance_mode", "dark"))
+    ui.start()
 
-    def on_save(new_cfg):
-        print("Gespeichert:", {k: v for k, v in new_cfg.items() if k != "anthropic_key"})
+    def build(root, finish):
+        dlg = SettingsDialog(root, cfg, on_save=lambda c: print("Gespeichert."))
+        dlg.bind("<Destroy>", lambda e: e.widget is dlg and finish(None), add="+")
 
-    root = ctk.CTk()
-    root.withdraw()
-    dlg = SettingsDialog(root, cfg, on_save=on_save)
-    root.wait_window(dlg)
-    root.destroy()
+    ui.ask(build)
+    ui.stop()
 
 
 def run_tray():
@@ -69,10 +69,14 @@ def run_consent():
     """Telemetrie-Opt-in-Dialog anzeigen (setzt telemetry_asked zurueck)."""
     from src import config
     from src.main import _ask_telemetry_consent
+    from src.ui import UiThread
 
     cfg = config.load()
     cfg["telemetry_asked"] = False  # Reset fuer Testlauf
-    result = _ask_telemetry_consent(cfg)
+    ui = UiThread(cfg.get("appearance_mode", "dark"))
+    ui.start()
+    result = _ask_telemetry_consent(ui, cfg)
+    ui.stop()
     print(f"Ergebnis: telemetry_enabled={result['telemetry_enabled']}")
 
 
