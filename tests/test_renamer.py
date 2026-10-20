@@ -266,19 +266,19 @@ def test_via_claude_api_error():
 
 # ------------------------------------------------- Bewerbungs-Erkennung ----
 
-# Realitätsnaher OCR-Text wie im angehängten Screenshot
+# Realitätsnaher, frei erfundener OCR-Text (keine echten Personendaten!)
 _BEWERBUNG_TEXT = """\
-Rezaie Mohsen
-Andreas-Hofer-Straße 68
-79111 Freiburg
-Tel. 01786903950
-Mohsenrazaei17@icloud.com
+Mustermann Max
+Beispielweg 12
+12345 Musterstadt
+Tel. 0123 4567890
+max.mustermann@example.com
 
-Fred Bank GmbH & Co: KG
-Vordermattenstraße 7
-79108 Freiburg
+Beispiel Autohaus GmbH & Co. KG
+Industriestraße 7
+12345 Musterstadt
 
-Freiburg, 14. April 2026
+Musterstadt, 14. April 2026
 
 Bewerbung um einen Ausbildungsplatz als Karosserie- und Fahrzeugbaumechaniker
 
@@ -290,7 +290,7 @@ Teamarbeit ist für mich selbstverständlich, gleichzeitig arbeite ich auch eige
 
 Mit freundlichen Grüßen
 
-Mohsen Rezaie
+Max Mustermann
 """
 
 
@@ -298,7 +298,7 @@ def test_bewerbung_sender_aus_signatur():
     """Name wird aus dem Unterschriftsblock nach der Grußformel extrahiert."""
     lines = [l.strip() for l in _BEWERBUNG_TEXT.split("\n") if l.strip()]
     name = _extract_bewerber_name(lines)
-    assert name == "Mohsen-Rezaie"
+    assert name == "Max-Mustermann"
 
 
 def test_bewerbung_sender_aus_absenderblock():
