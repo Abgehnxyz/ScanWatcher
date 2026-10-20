@@ -18,11 +18,12 @@ from typing import NamedTuple
 import fitz  # pymupdf
 import pdfplumber
 import pytesseract
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter, ImageSequence
 
 log = logging.getLogger("scan_watcher.ocr")
 
 _MIN_CONFIDENCE = 40  # Unter diesem Wert → PRÜFEN_-Prefix empfohlen
+_MIN_TEXT_CHARS = 40  # Weniger Zeichen im Textlayer → Seite zusaetzlich per OCR lesen
 
 
 class OcrResult(NamedTuple):
@@ -69,11 +70,6 @@ def _preprocess(img: Image.Image) -> Image.Image:
     return img
 
 
-def extract_text(file_path: str, tesseract_exe: str, pages: int = 2) -> str:
-    """Extrahiert Text (rueckwaerts-kompatibel, gibt nur String zurueck)."""
-    return extract_text_with_confidence(file_path, tesseract_exe, pages).text
-
-
 def extract_text_with_confidence(
     file_path: str, tesseract_exe: str, pages: int = 2
 ) -> OcrResult:
@@ -83,11 +79,20 @@ def extract_text_with_confidence(
     """
     suffix = Path(file_path).suffix.lower()
     if suffix in (".jpg", ".jpeg", ".tiff", ".tif", ".png"):
-        return _try_image_ocr(file_path, tesseract_exe)
+        return _try_image_ocr(file_path, tesseract_exe, pages)
     text = _try_pdfplumber(file_path, pages)
-    if text:
+    if _has_enough_text(text):
         return OcrResult(text=text, confidence=100.0)
-    return _try_ocr(file_path, tesseract_exe, pages)
+    # Kein oder nur winziger Textlayer (z. B. Scanner-Fusszeile "Seite 1"):
+    # Seite per OCR lesen und das laengere Ergebnis nehmen.
+    result = _try_ocr(file_path, tesseract_exe, pages)
+    if len(result.text) >= len(text):
+        return result
+    return OcrResult(text=text, confidence=100.0)
+
+
+def _has_enough_text(text: str) -> bool:
+    return sum(c.isalnum() for c in text) >= _MIN_TEXT_CHARS
 
 
 def _try_pdfplumber(pdf_path: str, pages: int) -> str:
@@ -110,49 +115,89 @@ def _try_pdfplumber(pdf_path: str, pages: int) -> str:
     return text.strip()
 
 
-def _try_image_ocr(file_path: str, tesseract_exe: str) -> OcrResult:
+def _ocr_image(img: Image.Image) -> tuple[str, float]:
+    """Ein Tesseract-Lauf pro Bild – Text und Konfidenz aus denselben Daten."""
+    data = pytesseract.image_to_data(_preprocess(img), lang="deu+eng",
+                                     output_type=pytesseract.Output.DICT)
+    return _text_from_data(data), _mean_confidence(data)
+
+
+def _try_image_ocr(file_path: str, tesseract_exe: str, pages: int = 2) -> OcrResult:
+    texts: list[str] = []
+    confs: list[float] = []
     try:
         pytesseract.pytesseract.tesseract_cmd = _resolve_tesseract(tesseract_exe)
-        img = Image.open(file_path)
-        img = _preprocess(img)
-        data = pytesseract.image_to_data(img, lang="deu+eng",
-                                         output_type=pytesseract.Output.DICT)
-        text = pytesseract.image_to_string(img, lang="deu+eng")
-        conf = _mean_confidence(data)
+        with Image.open(file_path) as img:
+            # Mehrseitige TIFFs: bis zu `pages` Seiten lesen
+            for i, frame in enumerate(ImageSequence.Iterator(img)):
+                if i >= pages:
+                    break
+                t, c = _ocr_image(frame.copy())
+                texts.append(t)
+                if c >= 0:
+                    confs.append(c)
+        text = "\n".join(texts).strip()
+        conf = sum(confs) / len(confs) if confs else -1
         log.debug(f"Bild-OCR: {len(text)} Zeichen, Konfidenz: {conf:.0f}%")
-        return OcrResult(text=text.strip(), confidence=conf)
+        return OcrResult(text=text, confidence=conf)
     except Exception as e:
         log.warning(f"Bild-OCR fehlgeschlagen: {e}")
         return OcrResult(text="", confidence=-1)
 
 
 def _try_ocr(pdf_path: str, tesseract_exe: str, pages: int) -> OcrResult:
-    text = ""
+    texts: list[str] = []
     confs: list[float] = []
     try:
         pytesseract.pytesseract.tesseract_cmd = _resolve_tesseract(tesseract_exe)
-        doc = fitz.open(pdf_path)
-        for i in range(min(pages, len(doc))):
-            pix = doc[i].get_pixmap(matrix=fitz.Matrix(200 / 72, 200 / 72))
-            img = Image.open(io.BytesIO(pix.tobytes("png")))
-            img = _preprocess(img)
-            data = pytesseract.image_to_data(img, lang="deu+eng",
-                                              output_type=pytesseract.Output.DICT)
-            text += pytesseract.image_to_string(img, lang="deu+eng") + "\n"
-            c = _mean_confidence(data)
-            if c >= 0:
-                confs.append(c)
-        doc.close()
+        with fitz.open(pdf_path) as doc:
+            for i in range(min(pages, len(doc))):
+                pix = doc[i].get_pixmap(matrix=fitz.Matrix(200 / 72, 200 / 72))
+                img = Image.open(io.BytesIO(pix.tobytes("png")))
+                t, c = _ocr_image(img)
+                texts.append(t)
+                if c >= 0:
+                    confs.append(c)
         conf = sum(confs) / len(confs) if confs else -1
-        log.debug(f"OCR: {len(text)} Zeichen, Konfidenz: {conf:.0f}%")
     except Exception as e:
         log.warning(f"OCR fehlgeschlagen: {e}")
         conf = -1
-    return OcrResult(text=text.strip(), confidence=conf)
+    text = "\n".join(texts).strip()
+    log.debug(f"OCR: {len(text)} Zeichen, Konfidenz: {conf:.0f}%")
+    return OcrResult(text=text, confidence=conf)
+
+
+def _text_from_data(data: dict) -> str:
+    """Text mit Zeilenumbruechen aus Tesseract-image_to_data rekonstruieren."""
+    lines: list[str] = []
+    current: list[str] = []
+    last_key = None
+    for i, word in enumerate(data.get("text", [])):
+        word = (word or "").strip()
+        if not word:
+            continue
+        key = (data["block_num"][i], data["par_num"][i], data["line_num"][i])
+        if last_key is not None and key != last_key:
+            lines.append(" ".join(current))
+            current = []
+        current.append(word)
+        last_key = key
+    if current:
+        lines.append(" ".join(current))
+    return "\n".join(lines)
 
 
 def _mean_confidence(data: dict) -> float:
-    vals = [int(c) for c in data.get("conf", []) if str(c).lstrip("-").isdigit() and int(c) >= 0]
+    """Mittlere Wort-Konfidenz. Je nach Version Ganz- oder Kommazahlen
+    ("96.53"); -1 steht fuer Nicht-Wort-Elemente."""
+    vals = []
+    for c in data.get("conf", []):
+        try:
+            v = float(c)
+        except (TypeError, ValueError):
+            continue
+        if v >= 0:
+            vals.append(v)
     return sum(vals) / len(vals) if vals else -1
 
 
