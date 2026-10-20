@@ -575,3 +575,128 @@ def test_apply_template_no_traversal_or_reserved_names():
     result = apply_template("../{ABSENDER}/CON", "2026-05-08", "X", "Y")
     assert ".." not in result.split("/")
     assert result.split("/")[-1].lower() != "con"
+
+
+# ------------------------------------- Ollama / eigene Endpunkte / Verbindungstest
+
+from src import renamer as _r
+
+
+def _capture_urlopen(responses):
+    """urlopen-Attrappe: merkt sich Requests, liefert der Reihe nach Antworten
+    (dict → JSON, Exception → wird geworfen)."""
+    seen = []
+
+    def fake(req, timeout=0):
+        seen.append(req)
+        r = responses.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return _http_resp(r)
+    return fake, seen
+
+
+def test_normalize_urls():
+    assert _r.normalize_ollama_url("") == "http://localhost:11434"
+    assert _r.normalize_ollama_url("192.168.1.20:11434/api/") == "http://192.168.1.20:11434"
+    assert _r.normalize_base_url("localhost:1234/v1/chat/completions") == "http://localhost:1234/v1"
+    assert _r.normalize_base_url("https://openrouter.ai/api/v1/") == "https://openrouter.ai/api/v1"
+
+
+def test_ollama_remote_server_with_key_and_schema():
+    fake, seen = _capture_urlopen([{"response": _FIELDS_JSON}])
+    with patch("urllib.request.urlopen", side_effect=fake):
+        name, used = determine_name_with_source(
+            _OCR, "001.pdf", active_model="ollama", ollama_model="llama3.1:latest",
+            ollama_url="nas.local:11434", model_keys={"ollama": "geheim"},
+        )
+    req = seen[0]
+    body = json.loads(req.data)
+    assert used == "ollama"
+    assert req.full_url == "http://nas.local:11434/api/generate"
+    assert req.get_header("Authorization") == "Bearer geheim"
+    assert body["format"]["required"] == ["datum", "absender", "betreff"]   # JSON-Schema
+    assert body["model"] == "llama3.1:latest"
+
+
+def test_ollama_old_server_falls_back_to_json_mode():
+    err = urllib.error.HTTPError("u", 400, "bad", {}, io.BytesIO(b'{"error":"invalid format"}'))
+    fake, seen = _capture_urlopen([err, {"response": _FIELDS_JSON}])
+    with patch("urllib.request.urlopen", side_effect=fake):
+        _, used = determine_name_with_source(_OCR, "001.pdf", active_model="ollama", ollama_model="m")
+    assert used == "ollama"
+    assert json.loads(seen[1].data)["format"] == "json"
+
+
+def test_ollama_without_key_sends_no_auth_header():
+    fake, seen = _capture_urlopen([{"response": _FIELDS_JSON}])
+    with patch("urllib.request.urlopen", side_effect=fake):
+        determine_name(_OCR, "001.pdf", active_model="ollama", ollama_model="m")
+    assert seen[0].get_header("Authorization") is None
+
+
+def test_custom_endpoint_without_key():
+    fake, seen = _capture_urlopen([{"choices": [{"message": {"content": _FIELDS_JSON}}]}])
+    with patch("urllib.request.urlopen", side_effect=fake):
+        _, used = determine_name_with_source(
+            _OCR, "001.pdf", active_model="custom",
+            custom_base_url="localhost:1234/v1", model_ids={"custom": "qwen3-8b"},
+        )
+    assert used == "custom"
+    assert seen[0].full_url == "http://localhost:1234/v1/chat/completions"
+    assert seen[0].get_header("Authorization") is None
+    assert json.loads(seen[0].data)["model"] == "qwen3-8b"
+
+
+def test_custom_endpoint_incomplete_falls_back_to_rules():
+    _, used = determine_name_with_source(_OCR, "001.pdf", active_model="custom",
+                                         custom_base_url="http://x/v1")
+    assert used == "rules"
+
+
+def test_list_models():
+    fake, _ = _capture_urlopen([{"models": [{"name": "qwen2.5-coder:7b"}, {"name": "llama3.1:latest"}]}])
+    with patch("urllib.request.urlopen", side_effect=fake):
+        assert _r.list_ollama_models() == ["llama3.1:latest", "qwen2.5-coder:7b"]
+    fake, seen = _capture_urlopen([{"data": [{"id": "b"}, {"id": "a"}]}])
+    with patch("urllib.request.urlopen", side_effect=fake):
+        assert _r.list_compat_models("http://x/v1", "k") == ["a", "b"]
+    assert seen[0].full_url == "http://x/v1/models"
+
+
+def test_probe_provider_success():
+    fake, _ = _capture_urlopen([{"response":
+        '{"datum": "2026-03-14", "absender": "Stadtwerke Musterstadt", "betreff": "Jahresabrechnung"}'}])
+    with patch("urllib.request.urlopen", side_effect=fake):
+        name, seconds = _r.probe_provider("ollama", ollama_model="m")
+    assert name == "2026-03-14_Stadtwerke-Musterstadt_Jahresabrechnung"
+    assert seconds >= 0
+
+
+def test_probe_provider_readable_errors():
+    """Der Testknopf zeigt den echten Grund statt still aufs Regelwerk zu fallen."""
+    fake, _ = _capture_urlopen([urllib.error.URLError(ConnectionRefusedError("refused"))])
+    with patch("urllib.request.urlopen", side_effect=fake):
+        try:
+            _r.probe_provider("ollama", ollama_model="m", ollama_url="nas:11434")
+        except RuntimeError as e:
+            assert "nas:11434 nicht erreichbar" in str(e)
+        else:
+            raise AssertionError("Fehler erwartet")
+
+    err = urllib.error.HTTPError("u", 404, "nf", {}, io.BytesIO(b'{"error":"model \'llama3.2\' not found"}'))
+    fake, _ = _capture_urlopen([err])
+    with patch("urllib.request.urlopen", side_effect=fake):
+        try:
+            _r.probe_provider("ollama", ollama_model="llama3.2")
+        except RuntimeError as e:
+            assert "HTTP 404" in str(e) and "not found" in str(e)
+        else:
+            raise AssertionError("Fehler erwartet")
+
+    try:
+        _r.probe_provider("claude", model_keys={})
+    except ValueError as e:
+        assert "API-Key" in str(e)
+    else:
+        raise AssertionError("Fehler erwartet")

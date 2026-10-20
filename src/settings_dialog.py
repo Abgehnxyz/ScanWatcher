@@ -17,12 +17,13 @@ from . import config, renamer, theme
 
 _MODEL_OPTIONS = [
     ("rules",   "Keines – Regelwerk (offline)"),
+    ("ollama",  "Ollama (lokal oder eigener Server)"),
+    ("custom",  "OpenAI-kompatibel (LM Studio, vLLM, OpenRouter …)"),
     ("claude",  "Claude Haiku (Anthropic)"),
     ("openai",  "OpenAI"),
     ("gemini",  "Gemini Flash (Google)"),
     ("mistral", "Mistral Small (EU-Server)"),
     ("groq",    "Groq (sehr schnell)"),
-    ("ollama",  "Ollama (lokal, kein Internet)"),
 ]
 _MODEL_ID      = {display: key for key, display in _MODEL_OPTIONS}
 _MODEL_DISPLAY = {key: display for key, display in _MODEL_OPTIONS}
@@ -32,52 +33,53 @@ def _mask_key(key: str) -> str:
     if not key:
         return ""
     if len(key) <= 12:
-        return key[:2] + "\u2022" * max(1, len(key) - 2)
-    return key[:6] + "\u2022" * 8 + key[-4:]
+        return key[:2] + "•" * max(1, len(key) - 2)
+    return key[:6] + "•" * 8 + key[-4:]
 
 
 _MODEL_DETAIL = {
     "rules": {
-        "has_key": False,
         "info":  "Umbenennung per Regelwerk – erkennt Datum, Absender und Betreff aus dem OCR-Text.",
         "info2": "Kein Internet, keine Kosten.",
         "color": theme.SUBTLE,
     },
+    "ollama": {
+        "hint":    "Installieren: ollama.com  |  Modell laden: ollama pull llama3.1",
+        "warning": "Lokal oder im eigenen Netz – der OCR-Text bleibt bei dir.",
+        "color":   theme.OK,
+        "key_label": "API-Key (optional – nur für geschützte Server)",
+    },
+    "custom": {
+        "hint":    "Basis-URL endet meist auf /v1 – z. B. http://localhost:1234/v1 (LM Studio), "
+                   "http://server:8000/v1 (vLLM), https://openrouter.ai/api/v1",
+        "warning": "OCR-Text wird an den eingetragenen Server übermittelt.",
+        "color":   theme.WARN,
+        "key_label": "API-Key (optional – lokale Server brauchen meist keinen)",
+    },
     "claude": {
-        "has_key": True,
         "hint":    "API-Key: console.anthropic.com  |  unter $0.001/Dok.",
         "warning": "OCR-Text wird an US-Server (Anthropic) uebermittelt.",
         "color":   theme.WARN,
     },
     "openai": {
-        "has_key": True,
         "hint":    "API-Key: platform.openai.com  |  Preise: openai.com/api/pricing",
         "warning": "OCR-Text wird an US-Server (OpenAI) uebermittelt.",
         "color":   theme.WARN,
     },
     "gemini": {
-        "has_key": True,
         "hint":    "API-Key: aistudio.google.com  |  Kostenloses Kontingent verfügbar",
         "warning": "OCR-Text wird an US-Server (Google) uebermittelt.",
         "color":   theme.WARN,
     },
     "mistral": {
-        "has_key": True,
         "hint":    "API-Key: console.mistral.ai  |  ~$0.001/Dok. – EU-Server (DSGVO-freundlich)",
         "warning": "OCR-Text wird an EU-Server (Mistral AI, Frankreich) uebermittelt.",
         "color":   theme.INFO,
     },
     "groq": {
-        "has_key": True,
         "hint":    "API-Key: console.groq.com  |  Kostenloses Kontingent, sehr schnell",
         "warning": "OCR-Text wird an US-Server (Groq) uebermittelt.",
         "color":   theme.WARN,
-    },
-    "ollama": {
-        "has_key": False,
-        "info":  "Laeuft lokal auf Port 11434 – kein Internet, keine Kosten.",
-        "info2": "Installieren: ollama.com  |  Modell laden: ollama pull llama3.2",
-        "color": theme.INFO,
     },
 }
 
@@ -94,6 +96,10 @@ class SettingsDialog(ctk.CTkToplevel):
             m: tk.StringVar(master=self, value=self.cfg.get("model_ids", {}).get(m, ""))
             for m in config.KEY_MODELS
         }
+        self._var_ollama_url = tk.StringVar(
+            master=self, value=self.cfg.get("ollama_url") or renamer.DEFAULT_OLLAMA_URL)
+        self._var_ollama_model = tk.StringVar(master=self, value=self.cfg.get("ollama_model", ""))
+        self._var_custom_base_url = tk.StringVar(master=self, value=self.cfg.get("custom_base_url", ""))
 
         theme.prepare_window(self, "Scan Watcher – Einstellungen")
         self.resizable(False, False)
@@ -412,11 +418,10 @@ class SettingsDialog(ctk.CTkToplevel):
     # ------------------------------------------------------------------ Modell
 
     def _model_section(self, parent: ctk.CTkFrame):
-        self._model_keys = {
-            m: config.get_model_key(m)
-            for m in ("claude", "openai", "gemini", "mistral", "groq")
-        }
+        self._model_keys = {m: config.get_model_key(m) for m in config.KEY_MODELS}
         self._current_model = self.cfg.get("active_model", "rules")
+        if self._current_model not in _MODEL_DISPLAY:
+            self._current_model = "rules"
 
         ctk.CTkLabel(
             parent,
@@ -432,7 +437,7 @@ class SettingsDialog(ctk.CTkToplevel):
             height=36,
             command=self._on_model_change,
         )
-        self._om_active_model.set(_MODEL_DISPLAY.get(self._current_model, display_values[0]))
+        self._om_active_model.set(_MODEL_DISPLAY[self._current_model])
         self._om_active_model.pack(fill="x", pady=(0, 8))
 
         self._model_detail_frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -447,28 +452,17 @@ class SettingsDialog(ctk.CTkToplevel):
 
     def _capture_current_model_key(self):
         m = getattr(self, "_current_model", "rules")
-        if m in ("rules", "ollama"):
+        if m not in self._model_keys:
             return
         # Direkt vom Entry-Widget lesen (zuverlässiger als StringVar + show='*')
         entry = getattr(self, f"_entry_{m}", None)
         if entry:
-            # Kein Wert wenn Placeholder aktiv (FocusOut-Phantom)
-            if getattr(entry, "_placeholder_text_active", False):
-                return
             try:
-                raw = getattr(entry, "_entry", None)
-                val = (raw.get() if raw is not None else entry.get()).strip()
+                if not entry.winfo_exists():
+                    return
             except Exception:
-                val = ""
-            if val:
-                self._model_keys[m] = val
                 return
-        # Fallback: StringVar
-        var = getattr(self, f"_var_{m}_key", None)
-        if var:
-            val = var.get().strip()
-            if val:
-                self._model_keys[m] = val
+            self._live_capture_key(m, entry)
 
     def _edit_model_key(self, model_key: str):
         """'Ändern' geklickt: Key in _model_keys löschen, Eingabefeld anzeigen."""
@@ -491,14 +485,7 @@ class SettingsDialog(ctk.CTkToplevel):
         """'✓ Schlüssel speichern' geklickt: Key direkt aus Entry lesen und
         sofort in den Windows Credential Manager schreiben. Umgeht alle
         FocusOut/Placeholder-Probleme des Haupt-Speichern-Buttons."""
-        if getattr(entry, "_placeholder_text_active", False):
-            messagebox.showwarning("Leer", "Bitte zuerst einen API-Key einfügen.", parent=self)
-            return
-        try:
-            raw = getattr(entry, "_entry", None)
-            val = (raw.get() if raw is not None else entry.get()).strip()
-        except Exception:
-            val = ""
+        val = self._entry_value(entry)
         if not val:
             messagebox.showwarning("Leer", "Bitte zuerst einen API-Key einfügen.", parent=self)
             return
@@ -522,21 +509,26 @@ class SettingsDialog(ctk.CTkToplevel):
         if btn:
             btn.configure(text="\U0001f648" if visible else "\U0001f441")
 
+    @staticmethod
+    def _entry_value(entry) -> str:
+        """Inhalt eines CTkEntry – leer, solange nur der Platzhalter steht."""
+        if getattr(entry, "_placeholder_text_active", False):
+            return ""
+        try:
+            raw = getattr(entry, "_entry", None)
+            return (raw.get() if raw is not None else entry.get()).strip()
+        except Exception:
+            return ""
+
     def _live_capture_key(self, model_key: str, entry) -> None:
         """Liest den Key direkt aus dem Entry-Widget und speichert ihn sofort
         in _model_keys. Wird bei Tastendruck, Paste und FocusOut aufgerufen,
         damit der Wert unabhängig vom Haupt-Save-Button verfügbar ist."""
-        # Kein Wert speichern wenn Placeholder aktiv (FocusOut-Phantom)
-        if getattr(entry, "_placeholder_text_active", False):
-            return
-        try:
-            # CTkEntry: internen tkinter-Entry direkt ansprechen falls vorhanden
-            raw = getattr(entry, "_entry", None)
-            val = (raw.get() if raw is not None else entry.get()).strip()
-        except Exception:
-            val = ""
+        val = self._entry_value(entry)
         if val:
             self._model_keys[model_key] = val
+
+    # ------------------------------------------------ Modell-Details
 
     def _rebuild_model_detail(self, model_key: str):
         for w in self._model_detail_frame.winfo_children():
@@ -544,125 +536,235 @@ class SettingsDialog(ctk.CTkToplevel):
         p = self._model_detail_frame
         d = _MODEL_DETAIL.get(model_key, _MODEL_DETAIL["rules"])
 
+        if model_key == "rules":
+            self._info_label(p, f"  {d['info']}\n  {d['info2']}", d["color"])
+            return
+
         if model_key == "ollama":
-            self._text_row(p, "Ollama-Modell (z. B. llama3.2, mistral, gemma3)", "ollama_model")
-            ctk.CTkLabel(
-                p,
-                text=f"  {d['info']}\n  {d['info2']}",
-                font=ctk.CTkFont(size=10),
-                text_color=d["color"],
-                anchor="w",
-                wraplength=460,
-            ).pack(fill="x", pady=(0, 4))
+            self._labeled_entry(p, "Server", self._var_ollama_url,
+                                f"Standard: {renamer.DEFAULT_OLLAMA_URL}  (auch z. B. 192.168.1.20:11434)")
+            self._model_picker(p, self._var_ollama_model, "ollama")
+        elif model_key == "custom":
+            self._labeled_entry(p, "Basis-URL", self._var_custom_base_url,
+                                "z. B. http://localhost:1234/v1")
+            self._model_picker(p, self._model_id_vars["custom"], "custom")
 
-        elif d.get("has_key"):
-            existing_key = self._model_keys.get(model_key, "")
+        if d.get("key_label"):
+            ctk.CTkLabel(p, text=d["key_label"], anchor="w",
+                         font=ctk.CTkFont(size=11)).pack(fill="x", pady=(6, 2))
+        self._key_widget(p, model_key)
 
-            if existing_key:
-                # ── Schlüssel vorhanden: Masked-Preview-Zeile ──────────────
-                key_row = ctk.CTkFrame(p, fg_color=theme.OK_BG, corner_radius=6)
-                key_row.pack(fill="x", pady=(0, 4))
+        self._info_label(p, f"  {d['hint']}", theme.INFO, pady=(0, 0))
+        self._info_label(p, f"  {d['warning']}", d["color"])
 
-                ctk.CTkLabel(
-                    key_row,
-                    text=f"\U0001f511  {_mask_key(existing_key)}",
-                    font=ctk.CTkFont(size=11, family="Courier New"),
-                    text_color=theme.OK,
-                    anchor="w",
-                ).pack(side="left", padx=(12, 0), pady=8)
-
-                ctk.CTkButton(
-                    key_row, text="Löschen", width=78, height=28,
-                    fg_color="transparent", border_width=1,
-                    border_color=theme.DANGER, hover_color=theme.DANGER_HOVER,
-                    text_color=theme.DANGER,
-                    command=lambda mk=model_key: self._delete_model_key(mk),
-                ).pack(side="right", padx=(4, 8), pady=8)
-
-                ctk.CTkButton(
-                    key_row, text="Ändern", width=78, height=28,
-                    fg_color="transparent", border_width=1, text_color=theme.TEXT,
-                    border_color=theme.BORDER, hover_color=theme.DIVIDER,
-                    command=lambda mk=model_key: self._edit_model_key(mk),
-                ).pack(side="right", padx=(4, 0), pady=8)
-
-            else:
-                # ── Kein Schlüssel: Eingabefeld anzeigen ──────────────────
-                entry_row = ctk.CTkFrame(p, fg_color="transparent")
-                entry_row.pack(fill="x", pady=(0, 4))
-
-                entry = ctk.CTkEntry(
-                    entry_row, show="*", height=36,
-                    placeholder_text="API-Key einfügen  (Strg+V) ...",
-                )
-                entry.pack(side="left", fill="x", expand=True, padx=(0, 4))
-                entry.focus()
-                setattr(self, f"_entry_{model_key}", entry)
-
-                # Echtzeit-Capture: Paste + Tippen landen sofort in _model_keys
-                def _capture(event=None, mk=model_key, ew=entry):
-                    # Nach Paste 20 ms warten damit Tkinter den Text einfügt
-                    delay = 20 if event and event.type == "36" else 0
-                    self.after(delay, lambda: self._live_capture_key(mk, ew))
-
-                entry.bind("<KeyRelease>", _capture)
-                entry.bind("<<Paste>>",    lambda e, mk=model_key, ew=entry:
-                           self.after(20, lambda: self._live_capture_key(mk, ew)))
-                entry.bind("<FocusOut>",   _capture)
-
-                btn_eye = ctk.CTkButton(
-                    entry_row, text="\U0001f441", width=36, height=36,
-                    fg_color=theme.DIVIDER, hover_color=theme.HOVER_STRONG,
-                    command=lambda mk=model_key: self._toggle_key_visibility(mk),
-                )
-                btn_eye.pack(side="left", padx=(0, 4))
-                setattr(self, f"_btn_eye_{model_key}", btn_eye)
-
-                # Expliziter Speichern-Button: liest Entry direkt und schreibt in Keyring
-                ctk.CTkButton(
-                    entry_row, text="✓ Schlüssel speichern", height=36,
-                    fg_color=theme.SAVE_BG, hover_color=theme.SAVE_HOVER, text_color=theme.SAVE_TEXT,
-                    border_width=1, border_color=theme.SAVE_HOVER,
-                    command=lambda mk=model_key, ew=entry: self._save_key_immediately(mk, ew),
-                ).pack(side="left")
-
-            ctk.CTkLabel(
-                p,
-                text=f"  {d['hint']}",
-                font=ctk.CTkFont(size=10),
-                text_color=theme.INFO,
-                anchor="w",
-                wraplength=460,
-            ).pack(fill="x")
-            ctk.CTkLabel(
-                p,
-                text=f"  {d['warning']}",
-                font=ctk.CTkFont(size=10),
-                text_color=d["color"],
-                anchor="w",
-                wraplength=460,
-            ).pack(fill="x", pady=(0, 4))
-
+        if model_key in renamer.DEFAULT_MODEL_IDS:
             # Modell-ID optional ueberschreiben – falls ein Anbieter sein
             # Standardmodell abschaltet, ohne auf ein Update zu warten
-            id_row = ctk.CTkFrame(p, fg_color="transparent")
-            id_row.pack(fill="x", pady=(4, 4))
-            ctk.CTkLabel(id_row, text="Modell-ID", width=80, anchor="w",
-                         font=ctk.CTkFont(size=11)).pack(side="left")
-            ctk.CTkEntry(
-                id_row, textvariable=self._model_id_vars[model_key], height=30,
-                placeholder_text=f"Standard: {renamer.DEFAULT_MODEL_IDS[model_key]}",
-            ).pack(side="left", fill="x", expand=True)
+            self._labeled_entry(p, "Modell-ID", self._model_id_vars[model_key],
+                                f"Standard: {renamer.DEFAULT_MODEL_IDS[model_key]}")
 
-        else:  # rules
+        self._test_row(p)
+
+    def _info_label(self, parent, text: str, color, pady=(0, 4)):
+        ctk.CTkLabel(
+            parent, text=text, font=ctk.CTkFont(size=10), text_color=color,
+            anchor="w", justify="left", wraplength=460,
+        ).pack(fill="x", pady=pady)
+
+    def _labeled_entry(self, parent, label: str, var: tk.StringVar, placeholder: str):
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=(2, 4))
+        ctk.CTkLabel(row, text=label, width=80, anchor="w",
+                     font=ctk.CTkFont(size=11)).pack(side="left")
+        ctk.CTkEntry(row, textvariable=var, height=30,
+                     placeholder_text=placeholder).pack(side="left", fill="x", expand=True)
+
+    def _model_picker(self, parent, var: tk.StringVar, kind: str):
+        """Auswahlfeld mit den Modellen des Servers – Eintippen bleibt moeglich."""
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=(2, 2))
+        ctk.CTkLabel(row, text="Modell", width=80, anchor="w",
+                     font=ctk.CTkFont(size=11)).pack(side="left")
+        combo = ctk.CTkComboBox(row, variable=var, height=30,
+                                values=[var.get()] if var.get() else [])
+        combo.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        status = ctk.CTkLabel(parent, text="", font=ctk.CTkFont(size=10),
+                              text_color=theme.MUTED, anchor="w", wraplength=460)
+        ctk.CTkButton(
+            row, text="↻ Laden", width=80, height=30,
+            command=lambda: self._load_models(kind, combo, var, status),
+        ).pack(side="left")
+        status.pack(fill="x")
+        # Beim Oeffnen gleich laden, wenn eine Adresse bekannt ist
+        if kind == "ollama" or self._var_custom_base_url.get().strip():
+            self.after(100, lambda: self._load_models(kind, combo, var, status))
+
+    def _load_models(self, kind: str, combo, var: tk.StringVar, status):
+        self._capture_current_model_key()
+        key = self._model_keys.get(kind, "")
+        url = (self._var_ollama_url if kind == "ollama" else self._var_custom_base_url).get()
+        status.configure(text="Lade Modellliste …", text_color=theme.MUTED)
+
+        def fetch():
+            if kind == "ollama":
+                return renamer.list_ollama_models(url, key)
+            return renamer.list_compat_models(url, key)
+
+        def show(models, error):
+            if not combo.winfo_exists():
+                return
+            if error:
+                status.configure(text=f"✗ {error}", text_color=theme.DANGER)
+                return
+            combo.configure(values=models)
+            if models and var.get() not in models:
+                var.set(models[0])
+            text = f"✓ {len(models)} Modell(e) gefunden" if models else "Keine Modelle gefunden"
+            if kind == "ollama" and not models:
+                text += " – mit „ollama pull llama3.1“ eines laden"
+            status.configure(text=text, text_color=theme.OK if models else theme.WARN)
+
+        self._run_in_background(fetch, show)
+
+    def _test_row(self, parent):
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=(8, 2))
+        result = ctk.CTkLabel(parent, text="", font=ctk.CTkFont(size=10), anchor="w",
+                              justify="left", wraplength=460, text_color=theme.MUTED)
+        btn = ctk.CTkButton(row, text="Verbindung testen", width=160, height=30)
+        btn.configure(command=lambda: self._test_connection(btn, result))
+        btn.pack(side="left")
+        ctk.CTkLabel(row, text="schickt einen erfundenen Beispielbrief",
+                     font=ctk.CTkFont(size=10), text_color=theme.MUTED).pack(side="left", padx=(10, 0))
+        result.pack(fill="x")
+
+    def _ai_options(self) -> dict:
+        """KI-Einstellungen aus den (noch nicht gespeicherten) Eingabefeldern."""
+        self._capture_current_model_key()
+        return {
+            "model_keys": dict(self._model_keys),
+            "model_ids": {m: v.get().strip() for m, v in self._model_id_vars.items() if v.get().strip()},
+            "ollama_model": self._var_ollama_model.get().strip(),
+            "ollama_url": self._var_ollama_url.get().strip(),
+            "custom_base_url": self._var_custom_base_url.get().strip(),
+        }
+
+    def _test_connection(self, btn, result):
+        opts = self._ai_options()
+        model = self._current_model
+        template = self._var_name_template.get().strip() or "{DATUM}_{ABSENDER}_{BETREFF}"
+        date_format = self._om_date_format.get()
+        space = "_" if self._om_space_replacement.get().startswith("_") else "-"
+        btn.configure(state="disabled", text="Teste …")
+        result.configure(text="", text_color=theme.MUTED)
+
+        def run():
+            return renamer.probe_provider(model, template, date_format, space, **opts)
+
+        def show(value, error):
+            if not btn.winfo_exists():
+                return
+            btn.configure(state="normal", text="Verbindung testen")
+            if error:
+                result.configure(text=f"✗ {error}", text_color=theme.DANGER)
+            else:
+                name, seconds = value
+                result.configure(text=f"✓ Funktioniert ({seconds:.1f} s) → {name}.pdf",
+                                 text_color=theme.OK)
+
+        self._run_in_background(run, show)
+
+    def _run_in_background(self, work, done):
+        """work() im Hintergrund-Thread, done(ergebnis, fehler) danach im UI-Thread."""
+        import threading
+        box: dict = {}
+
+        def worker():
+            try:
+                box["value"] = work()
+            except Exception as e:
+                box["error"] = str(e) or e.__class__.__name__
+
+        def poll():
+            if not self.winfo_exists():
+                return
+            if worker_thread.is_alive():
+                self.after(150, poll)
+                return
+            done(box.get("value"), box.get("error"))
+
+        worker_thread = threading.Thread(target=worker, daemon=True)
+        worker_thread.start()
+        self.after(150, poll)
+
+    def _key_widget(self, p, model_key: str):
+        existing_key = self._model_keys.get(model_key, "")
+
+        if existing_key:
+            # ── Schlüssel vorhanden: Masked-Preview-Zeile ──────────────
+            key_row = ctk.CTkFrame(p, fg_color=theme.OK_BG, corner_radius=6)
+            key_row.pack(fill="x", pady=(0, 4))
+
             ctk.CTkLabel(
-                p,
-                text=f"  {d['info']}\n  {d['info2']}",
-                font=ctk.CTkFont(size=10),
-                text_color=d["color"],
+                key_row,
+                text=f"\U0001f511  {_mask_key(existing_key)}",
+                font=ctk.CTkFont(size=11, family="Courier New"),
+                text_color=theme.OK,
                 anchor="w",
-                wraplength=460,
-            ).pack(fill="x", pady=(0, 4))
+            ).pack(side="left", padx=(12, 0), pady=8)
+
+            ctk.CTkButton(
+                key_row, text="Löschen", width=78, height=28,
+                fg_color="transparent", border_width=1,
+                border_color=theme.DANGER, hover_color=theme.DANGER_HOVER,
+                text_color=theme.DANGER,
+                command=lambda mk=model_key: self._delete_model_key(mk),
+            ).pack(side="right", padx=(4, 8), pady=8)
+
+            ctk.CTkButton(
+                key_row, text="Ändern", width=78, height=28,
+                fg_color="transparent", border_width=1, text_color=theme.TEXT,
+                border_color=theme.BORDER, hover_color=theme.DIVIDER,
+                command=lambda mk=model_key: self._edit_model_key(mk),
+            ).pack(side="right", padx=(4, 0), pady=8)
+            return
+
+        # ── Kein Schlüssel: Eingabefeld anzeigen ──────────────────
+        entry_row = ctk.CTkFrame(p, fg_color="transparent")
+        entry_row.pack(fill="x", pady=(0, 4))
+
+        entry = ctk.CTkEntry(
+            entry_row, show="*", height=36,
+            placeholder_text="API-Key einfügen  (Strg+V) ...",
+        )
+        entry.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        if model_key not in ("ollama", "custom"):
+            entry.focus()
+        setattr(self, f"_entry_{model_key}", entry)
+
+        # Echtzeit-Capture: Paste + Tippen landen sofort in _model_keys
+        def _capture(event=None, mk=model_key, ew=entry):
+            self.after(20, lambda: self._live_capture_key(mk, ew))
+
+        entry.bind("<KeyRelease>", _capture)
+        entry.bind("<<Paste>>", _capture)
+        entry.bind("<FocusOut>", _capture)
+
+        btn_eye = ctk.CTkButton(
+            entry_row, text="\U0001f441", width=36, height=36,
+            fg_color=theme.DIVIDER, hover_color=theme.HOVER_STRONG,
+            command=lambda mk=model_key: self._toggle_key_visibility(mk),
+        )
+        btn_eye.pack(side="left", padx=(0, 4))
+        setattr(self, f"_btn_eye_{model_key}", btn_eye)
+
+        # Expliziter Speichern-Button: liest Entry direkt und schreibt in Keyring
+        ctk.CTkButton(
+            entry_row, text="✓ Schlüssel speichern", height=36,
+            fg_color=theme.SAVE_BG, hover_color=theme.SAVE_HOVER, text_color=theme.SAVE_TEXT,
+            border_width=1, border_color=theme.SAVE_HOVER,
+            command=lambda mk=model_key, ew=entry: self._save_key_immediately(mk, ew),
+        ).pack(side="left")
 
     # ---------------------------------------------------- Benennungsschema
 
@@ -1010,17 +1112,6 @@ class SettingsDialog(ctk.CTkToplevel):
 
         setattr(self, f"_var_{key}", var)
 
-    def _text_row(self, parent: ctk.CTkFrame, label: str, key: str, show: str | None = None):
-        ctk.CTkLabel(
-            parent, text=label, anchor="w",
-            font=ctk.CTkFont(size=12, weight="bold"),
-        ).pack(fill="x", pady=(0, 4))
-
-        var = tk.StringVar(value=self.cfg.get(key, ""))
-        kw = {"show": show} if show else {}
-        ctk.CTkEntry(parent, textvariable=var, height=36, **kw).pack(fill="x", pady=(0, 10))
-        setattr(self, f"_var_{key}", var)
-
     def _check_update_now(self):
         from . import updater
         self._btn_check_now.configure(state="disabled", text="Prüfe…")
@@ -1137,8 +1228,18 @@ class SettingsDialog(ctk.CTkToplevel):
                 val = ""
             if val:
                 config.set_model_key(m, val)
-        ollama_var = getattr(self, "_var_ollama_model", None)
-        self.cfg["ollama_model"] = ollama_var.get().strip() if ollama_var else self.cfg.get("ollama_model", "llama3.2")
+        self.cfg["ollama_model"]    = self._var_ollama_model.get().strip()
+        self.cfg["ollama_url"]      = renamer.normalize_ollama_url(self._var_ollama_url.get())
+        self.cfg["custom_base_url"] = renamer.normalize_base_url(self._var_custom_base_url.get())
+
+        missing = {
+            "ollama": not self.cfg["ollama_model"] and "Bitte ein Ollama-Modell auswählen.",
+            "custom": (not self.cfg["custom_base_url"] and "Bitte die Basis-URL des Endpunkts eintragen.")
+                      or (not self.cfg["model_ids"].get("custom") and "Bitte ein Modell für den Endpunkt eintragen."),
+        }.get(self.cfg["active_model"])
+        if missing:
+            messagebox.showerror("KI-Modell unvollständig", missing, parent=self)
+            return
 
         custom_senders = {}
         for kv, vv, _ in getattr(self, "_sender_rows", []):

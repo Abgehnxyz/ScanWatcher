@@ -125,6 +125,18 @@ def _move(src: str, dest: str, overwrite: bool) -> None:
         shutil.move(src, dest)   # anderes Laufwerk / Netzlaufwerk
 
 
+def ai_options(cfg: dict) -> dict:
+    """KI-Einstellungen aus der Config fuer renamer.determine_name()."""
+    return {
+        "active_model": cfg.get("active_model", "rules"),
+        "model_keys": {m: config.get_model_key(m) for m in config.KEY_MODELS},
+        "model_ids": cfg.get("model_ids", {}),
+        "ollama_model": cfg.get("ollama_model", ""),
+        "ollama_url": cfg.get("ollama_url", ""),
+        "custom_base_url": cfg.get("custom_base_url", ""),
+    }
+
+
 def _dest_path(folder: str, name: str, ext: str, strategy: str) -> str:
     """Zielpfad aus relativem Namen (ggf. mit Unterordnern "2026/05/…")."""
     parts = name.split("/")
@@ -210,18 +222,14 @@ def _process(path: str, cfg: dict, notify=None) -> bool:
         log.info(f"  Text: {len(text)} Zeichen, Konfidenz: {ocr_result.confidence:.0f}%")
 
         if text:
-            model_keys = {m: config.get_model_key(m) for m in config.KEY_MODELS}
             name, used = renamer.determine_name_with_source(
                 text, filename,
-                active_model=cfg.get("active_model", "rules"),
-                model_keys=model_keys,
-                ollama_model=cfg.get("ollama_model", "llama3.2"),
                 name_template=cfg.get("name_template", "{DATUM}_{ABSENDER}_{BETREFF}"),
                 date_format=cfg.get("date_format", "YYYY-MM-DD"),
                 space_replacement=cfg.get("space_replacement", "-"),
                 custom_senders=cfg.get("custom_senders", {}),
                 custom_doc_types=cfg.get("custom_doc_types", {}),
-                model_ids=cfg.get("model_ids", {}),
+                **ai_options(cfg),
             )
             if ocr.needs_review(ocr_result):
                 # Prefix gehoert vor den Dateinamen, nicht vor einen Unterordner

@@ -32,7 +32,7 @@ Document types and the user interface are in German.
 | Feature | Description |
 |---------|-------------|
 | **OCR** | pdfplumber (text layer) + bundled Tesseract (scanned images, multi-page TIFF) with image preprocessing |
-| **AI renaming** | Claude, OpenAI, Gemini, Mistral, Groq or local Ollama models – the AI only extracts date, sender and subject; the file name is always built locally |
+| **AI renaming** | Your choice: local Ollama, any OpenAI-compatible server (LM Studio, vLLM, OpenRouter …) or Claude, OpenAI, Gemini, Mistral, Groq – the AI only extracts date, sender and subject; the file name is always built locally |
 | **Rule-based** | Works without AI – recognizes 500+ senders, dates and document types |
 | **Custom schema** | Configurable naming template with sub-folders, e.g. `{JAHR}/{DATUM}_{ABSENDER}_{BETREFF}` |
 | **Multiple profiles** | Watch multiple source→target folder pairs simultaneously |
@@ -69,19 +69,39 @@ A `/` in the template creates sub-folders: `{JAHR}/{MONAT}/{DATUM}_{ABSENDER}` �
 
 ## AI models
 
-| Mode | Default model | Cost | Internet | Setup |
-|------|---------------|------|----------|-------|
+Use whatever you already have – a local model, your own server or a cloud API:
+
+| Mode | Default model | Cost | Data leaves your network | Setup |
+|------|---------------|------|--------------------------|-------|
 | **Rule-based** | – | free | no | none |
-| **Ollama (local)** | `llama3.2` (configurable) | free | no | [Install Ollama](https://ollama.com) |
+| **Ollama** (local or own server) | pick from your server | free | no | [Install Ollama](https://ollama.com) |
+| **OpenAI-compatible** (any endpoint) | pick from your server | depends | depends | base URL + optional key |
 | **Claude** | `claude-haiku-5-5` | < $0.001/doc | yes | [API key](https://console.anthropic.com) |
 | **OpenAI** | `gpt-6-luna` | see OpenAI pricing | yes | [API key](https://platform.openai.com) |
 | **Gemini** | `gemini-flash-latest` | free tier | yes | [API key](https://aistudio.google.com) |
 | **Mistral** (EU) | `mistral-small-latest` | ~$0.001/doc | yes | [API key](https://console.mistral.ai) |
 | **Groq** | `openai/gpt-oss-20b` | free tier | yes | [API key](https://console.groq.com) |
 
-The model ID of every cloud provider can be overridden in the settings – useful when a provider retires a model before the next Scan Watcher release.
+Every mode has a **Test connection** button in the settings: it sends a made-up sample letter and shows the resulting file name – or the exact error (server unreachable, model not found, invalid key …).
 
-API keys are stored encrypted in the **Windows Credential Manager**, never in `config.json`. If an AI request fails (no credit, network error, refusal), Scan Watcher falls back to the rule-based naming and logs a warning.
+### Bring your own model
+
+**Ollama** – enter the server address (default `http://localhost:11434`, or e.g. `192.168.1.20:11434` for a machine in your network; start Ollama there with `OLLAMA_HOST=0.0.0.0`). The model list is loaded from the server. An API key is optional, for servers behind a reverse proxy with authentication. Models with good results on German letters: `llama3.1`, `qwen2.5`, `mistral`.
+
+**OpenAI-compatible** – works with every server that speaks the OpenAI Chat Completions API:
+
+| Server | Base URL | API key |
+|--------|----------|---------|
+| LM Studio | `http://localhost:1234/v1` | – |
+| vLLM | `http://<server>:8000/v1` | if configured |
+| LocalAI / llama.cpp server | `http://<server>:8080/v1` | if configured |
+| Ollama (OpenAI mode) | `http://localhost:11434/v1` | – |
+| OpenRouter | `https://openrouter.ai/api/v1` | yes |
+| DeepSeek | `https://api.deepseek.com/v1` | yes |
+
+**Cloud providers** – the model ID can be overridden in the settings, useful when a provider retires a model before the next Scan Watcher release.
+
+API keys are stored encrypted in the **Windows Credential Manager**, never in `config.json`. The AI only returns date, sender and subject as JSON; the file name is always built locally from your template. If an AI request fails during operation, Scan Watcher falls back to the rule-based naming and logs a warning.
 
 ---
 
@@ -90,7 +110,7 @@ API keys are stored encrypted in the **Windows Credential Manager**, never in `c
 - **Telemetry** is opt-in and disabled by default. When enabled, Scan Watcher sends the app version, Windows build, the naming mode used and success/failure counts – never file names or contents.
 - **Notices** (e.g. about critical bug fixes) are fetched from the Nova Network server only when telemetry is enabled.
 - **Update checks** contact the GitHub API and can be disabled in the settings.
-- **AI renaming** sends the OCR text (up to 6,000 characters) to the selected provider. Use the rule-based mode or Ollama to keep everything local.
+- **AI renaming** sends the OCR text (up to 6,000 characters) to the selected provider. Use the rule-based mode, Ollama or a local OpenAI-compatible server to keep everything in your own network.
 
 ---
 

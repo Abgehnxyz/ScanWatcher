@@ -12,7 +12,9 @@
 import json
 import logging
 import re
+import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -379,8 +381,10 @@ def apply_template(
 
 
 # ─────────────────────────────────────────────────────────────── KI-Anbieter
-# Standard-Modelle. In den Einstellungen pro Anbieter ueberschreibbar
-# (config["model_ids"]), damit eine Modell-Abschaltung kein Release erfordert.
+# Standard-Modelle der Cloud-Anbieter. In den Einstellungen pro Anbieter
+# ueberschreibbar (config["model_ids"]), damit eine Modell-Abschaltung kein
+# Release erfordert. Ollama und eigene Endpunkte haben kein Standardmodell –
+# das waehlt der Nutzer aus der Modellliste seines Servers.
 DEFAULT_MODEL_IDS = {
     "claude":  "claude-haiku-5-5",
     "openai":  "gpt-6-luna",
@@ -388,9 +392,12 @@ DEFAULT_MODEL_IDS = {
     "mistral": "mistral-small-latest",
     "groq":    "openai/gpt-oss-20b",
 }
+DEFAULT_OLLAMA_URL = "http://localhost:11434"
 
 _AI_TEXT_LIMIT = 6000
 _AI_MAX_TOKENS = 2048   # Reasoning-Modelle denken vor der Antwort – Platz lassen
+_CLOUD_TIMEOUT = 60
+_LOCAL_TIMEOUT = 300    # lokale Modelle: erstes Laden auf CPU kann dauern
 
 _FIELDS_SCHEMA = {
     "type": "object",
@@ -402,6 +409,52 @@ _FIELDS_SCHEMA = {
     "required": ["datum", "absender", "betreff"],
     "additionalProperties": False,
 }
+
+# Frei erfundener Beispielbrief fuer "Verbindung testen"
+SAMPLE_LETTER = """\
+Stadtwerke Musterstadt GmbH
+Postfach 10 20 30 · 12345 Musterstadt
+
+Herrn
+Max Mustermann
+Beispielweg 12
+12345 Musterstadt
+
+Musterstadt, 14.03.2026
+
+Jahresabrechnung Strom 2025
+Kundennummer 4711-0815
+
+Sehr geehrter Herr Mustermann,
+anbei erhalten Sie Ihre Jahresabrechnung für den Zeitraum 01.01.2025 bis 31.12.2025.
+Der neue Abschlag beträgt 84,00 EUR und ist fällig am 01.04.2026.
+
+Mit freundlichen Grüßen
+Ihre Stadtwerke Musterstadt
+"""
+
+
+def normalize_ollama_url(url: str) -> str:
+    """"192.168.1.5:11434", "http://host:11434/api/" … → "http://host:11434"."""
+    url = (url or "").strip() or DEFAULT_OLLAMA_URL
+    if "://" not in url:
+        url = "http://" + url
+    url = url.rstrip("/")
+    for suffix in ("/api/generate", "/api/chat", "/api"):
+        if url.endswith(suffix):
+            url = url[: -len(suffix)]
+    return url.rstrip("/")
+
+
+def normalize_base_url(url: str) -> str:
+    """Basis-URL eines OpenAI-kompatiblen Endpunkts ("…/v1")."""
+    url = (url or "").strip()
+    if url and "://" not in url:
+        url = "http://" + url
+    url = url.rstrip("/")
+    if url.endswith("/chat/completions"):
+        url = url[: -len("/chat/completions")]
+    return url.rstrip("/")
 
 
 def determine_name(text: str, original_filename: str, **kwargs) -> str:
@@ -421,19 +474,20 @@ def determine_name_with_source(
     custom_senders: dict | None = None,
     custom_doc_types: dict | None = None,
     model_ids: dict | None = None,
+    ollama_url: str = "",
+    custom_base_url: str = "",
 ) -> tuple[str, str]:
     """Wie determine_name, liefert zusaetzlich das tatsaechlich genutzte
-    Verfahren ("claude", "rules", …) – z. B. fuer die Telemetrie."""
-    keys = model_keys or {}
-    ids = {**DEFAULT_MODEL_IDS, **{k: v for k, v in (model_ids or {}).items() if v}}
+    Verfahren ("claude", "ollama", "rules", …) – z. B. fuer die Telemetrie."""
     fields = None
     try:
-        if active_model == "ollama":
-            fields = _via_ollama(text, ollama_model)
-        elif active_model in DEFAULT_MODEL_IDS and keys.get(active_model):
-            fields = _PROVIDERS[active_model](text, keys[active_model], ids[active_model])
+        fields = extract_fields(
+            text, active_model, model_keys=model_keys, model_ids=model_ids,
+            ollama_model=ollama_model, ollama_url=ollama_url,
+            custom_base_url=custom_base_url,
+        )
     except Exception as e:
-        log.warning(f"{active_model}: {e}")
+        log.warning(f"{active_model}: {e} – Fallback auf Regelwerk")
 
     if fields:
         name = _name_from_fields(
@@ -445,6 +499,80 @@ def determine_name_with_source(
         text, original_filename, name_template, date_format,
         space_replacement, custom_senders, custom_doc_types,
     ), "rules"
+
+
+def extract_fields(
+    text: str,
+    active_model: str,
+    model_keys: dict | None = None,
+    model_ids: dict | None = None,
+    ollama_model: str = "",
+    ollama_url: str = "",
+    custom_base_url: str = "",
+) -> dict | None:
+    """Datum/Absender/Betreff per KI bestimmen.
+    None fuer das Regelwerk; wirft bei Fehlern eine lesbare Exception."""
+    keys = model_keys or {}
+    ids = {**DEFAULT_MODEL_IDS, **{k: v for k, v in (model_ids or {}).items() if v}}
+
+    if active_model == "ollama":
+        if not ollama_model:
+            raise ValueError("Kein Ollama-Modell ausgewählt")
+        return _via_ollama(text, ollama_model, ollama_url, keys.get("ollama", ""))
+
+    if active_model == "custom":
+        if not normalize_base_url(custom_base_url):
+            raise ValueError("Keine Basis-URL für den eigenen Endpunkt eingetragen")
+        if not ids.get("custom"):
+            raise ValueError("Kein Modell für den eigenen Endpunkt eingetragen")
+        return _via_openai_compat(
+            text, keys.get("custom", ""), ids["custom"],
+            normalize_base_url(custom_base_url), "Eigener Endpunkt", timeout=_LOCAL_TIMEOUT,
+        )
+
+    if active_model in _PROVIDERS:
+        if not keys.get(active_model):
+            raise ValueError("Kein API-Key hinterlegt")
+        return _PROVIDERS[active_model](text, keys[active_model], ids[active_model])
+
+    return None
+
+
+def probe_provider(
+    active_model: str,
+    name_template: str = "{DATUM}_{ABSENDER}_{BETREFF}",
+    date_format: str = "YYYY-MM-DD",
+    space_replacement: str = "-",
+    **ai_options,
+) -> tuple[str, float]:
+    """"Verbindung testen": Beispielbrief durch den Anbieter schicken.
+    Liefert (Dateiname, Sekunden) oder wirft mit verstaendlicher Meldung."""
+    t0 = time.monotonic()
+    fields = extract_fields(SAMPLE_LETTER, active_model, **ai_options)
+    if fields is None:
+        raise ValueError("Für das Regelwerk gibt es nichts zu testen")
+    name = _name_from_fields(
+        fields, SAMPLE_LETTER, "beispiel.pdf", name_template, date_format,
+        space_replacement, None, None,
+    )
+    return name, time.monotonic() - t0
+
+
+def list_ollama_models(url: str = "", api_key: str = "") -> list[str]:
+    """Installierte Modelle eines Ollama-Servers (GET /api/tags)."""
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    data = _http_json(f"{normalize_ollama_url(url)}/api/tags", None, headers, 10, "Ollama")
+    return sorted(m["name"] for m in data.get("models", []) if m.get("name"))
+
+
+def list_compat_models(base_url: str, api_key: str = "") -> list[str]:
+    """Modelle eines OpenAI-kompatiblen Endpunkts (GET /models)."""
+    base = normalize_base_url(base_url)
+    if not base:
+        raise ValueError("Keine Basis-URL eingetragen")
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    data = _http_json(f"{base}/models", None, headers, 15, "Eigener Endpunkt")
+    return sorted(m["id"] for m in data.get("data", []) if m.get("id"))
 
 
 def _build_prompt(text: str) -> str:
@@ -484,6 +612,14 @@ def _parse_fields(raw: str) -> dict | None:
         return None
     fields = {k: str(data.get(k) or "").strip() for k in ("datum", "absender", "betreff")}
     return fields if (fields["absender"] or fields["betreff"]) else None
+
+
+def _require_fields(raw: str, provider: str) -> dict:
+    fields = _parse_fields(raw)
+    if not fields:
+        snippet = " ".join((raw or "").split())[:150]
+        raise ValueError(f"{provider}: Antwort nicht auswertbar ({snippet or 'leer'})")
+    return fields
 
 
 def _valid_iso_date(value: str) -> str:
@@ -533,64 +669,74 @@ def _match_custom(text: str, mapping: dict | None, whole_word: bool = False) -> 
     return ""
 
 
-def _http_json(url: str, payload: dict, headers: dict, timeout: int, provider: str) -> dict:
-    """POST mit JSON; HTTP-Fehler mit gekuerztem Antworttext loggen (ohne Key)."""
+def _http_json(url: str, payload: dict | None, headers: dict, timeout: int, provider: str) -> dict:
+    """JSON-Anfrage (POST mit payload, sonst GET). Fehler werden als
+    verstaendliche RuntimeError gemeldet – ohne den API-Key."""
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
     req = urllib.request.Request(
-        url, data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", **headers}, method="POST",
+        url, data=data, method="POST" if data is not None else "GET",
+        headers={"Content-Type": "application/json", **headers},
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         try:
-            detail = e.read().decode("utf-8", "replace")[:300]
+            detail = e.read().decode("utf-8", "replace")
+            detail = json.loads(detail).get("error", detail) if detail.startswith("{") else detail
         except Exception:
             detail = ""
-        raise RuntimeError(f"{provider} HTTP {e.code}: {detail}") from None
+        if isinstance(detail, dict):
+            detail = detail.get("message", detail)
+        raise RuntimeError(f"{provider} HTTP {e.code}: {str(detail)[:300]}") from None
+    except urllib.error.URLError as e:
+        host = urllib.parse.urlsplit(url).netloc
+        raise RuntimeError(f"{provider}: Server {host} nicht erreichbar ({e.reason})") from None
+    except TimeoutError:
+        raise RuntimeError(f"{provider}: Zeitüberschreitung nach {timeout} s") from None
 
 
 def _via_openai_compat(
     text: str, api_key: str, model_id: str,
     base_url: str, provider: str, token_param: str = "max_tokens",
-) -> dict | None:
-    """OpenAI-kompatibler Endpunkt (OpenAI, Mistral, Groq)."""
+    timeout: int = _CLOUD_TIMEOUT,
+) -> dict:
+    """OpenAI-kompatibler Endpunkt (OpenAI, Mistral, Groq, eigene Server)."""
     payload = {
         "model": model_id,
         "messages": [{"role": "user", "content": _build_prompt(text)}],
         token_param: _AI_MAX_TOKENS,
         "response_format": {"type": "json_object"},
     }
-    headers = {"Authorization": f"Bearer {api_key}"}
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     url = f"{base_url}/chat/completions"
     try:
-        data = _http_json(url, payload, headers, 60, provider)
+        data = _http_json(url, payload, headers, timeout, provider)
     except RuntimeError as e:
         if "HTTP 400" not in str(e):
             raise
-        # Manche Modelle kennen keinen JSON-Modus – ohne erneut versuchen
+        # Manche Server/Modelle kennen keinen JSON-Modus – ohne erneut versuchen
         payload.pop("response_format")
-        data = _http_json(url, payload, headers, 60, provider)
-    fields = _parse_fields(data["choices"][0]["message"].get("content") or "")
-    if fields:
-        log.info(f"  Benennung: {provider} ({model_id})")
+        data = _http_json(url, payload, headers, timeout, provider)
+    fields = _require_fields(data["choices"][0]["message"].get("content") or "", provider)
+    log.info(f"  Benennung: {provider} ({model_id})")
     return fields
 
 
-def _via_openai(text: str, api_key: str, model_id: str) -> dict | None:
+def _via_openai(text: str, api_key: str, model_id: str) -> dict:
     return _via_openai_compat(text, api_key, model_id, "https://api.openai.com/v1",
                               "OpenAI", token_param="max_completion_tokens")
 
 
-def _via_mistral(text: str, api_key: str, model_id: str) -> dict | None:
+def _via_mistral(text: str, api_key: str, model_id: str) -> dict:
     return _via_openai_compat(text, api_key, model_id, "https://api.mistral.ai/v1", "Mistral")
 
 
-def _via_groq(text: str, api_key: str, model_id: str) -> dict | None:
+def _via_groq(text: str, api_key: str, model_id: str) -> dict:
     return _via_openai_compat(text, api_key, model_id, "https://api.groq.com/openai/v1", "Groq")
 
 
-def _via_gemini(text: str, api_key: str, model_id: str) -> dict | None:
+def _via_gemini(text: str, api_key: str, model_id: str) -> dict:
     """Felder per Google Gemini API bestimmen (Key im Header, nicht in der URL)."""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
     payload = {
@@ -600,45 +746,63 @@ def _via_gemini(text: str, api_key: str, model_id: str) -> dict | None:
             "responseMimeType": "application/json",
         },
     }
-    data = _http_json(url, payload, {"x-goog-api-key": api_key}, 60, "Gemini")
+    data = _http_json(url, payload, {"x-goog-api-key": api_key}, _CLOUD_TIMEOUT, "Gemini")
     parts = data["candidates"][0]["content"].get("parts", [])
-    fields = _parse_fields("".join(p.get("text", "") for p in parts))
-    if fields:
-        log.info(f"  Benennung: Gemini ({model_id})")
+    fields = _require_fields("".join(p.get("text", "") for p in parts), "Gemini")
+    log.info(f"  Benennung: Gemini ({model_id})")
     return fields
 
 
-def _via_claude(text: str, api_key: str, model_id: str) -> dict | None:
+def _via_claude(text: str, api_key: str, model_id: str) -> dict:
     """Felder per Claude API bestimmen – Structured Output garantiert gueltiges JSON."""
     import anthropic
 
-    client = anthropic.Anthropic(api_key=api_key, timeout=60.0)
+    client = anthropic.Anthropic(api_key=api_key, timeout=float(_CLOUD_TIMEOUT))
     output_config = {"format": {"type": "json_schema", "schema": _FIELDS_SCHEMA}}
     if not (model_id.startswith("claude-3") or "haiku-4" in model_id):
         output_config["effort"] = "low"   # einfache Extraktion, wenig Denkaufwand
-    resp = client.messages.create(
-        model=model_id,
-        max_tokens=_AI_MAX_TOKENS,
-        output_config=output_config,
-        messages=[{"role": "user", "content": _build_prompt(text)}],
-    )
+    try:
+        resp = client.messages.create(
+            model=model_id,
+            max_tokens=_AI_MAX_TOKENS,
+            output_config=output_config,
+            messages=[{"role": "user", "content": _build_prompt(text)}],
+        )
+    except anthropic.APIStatusError as e:
+        msg = getattr(e, "message", "") or str(e)
+        raise RuntimeError(f"Claude HTTP {e.status_code}: {msg[:300]}") from None
+    except anthropic.APIConnectionError:
+        raise RuntimeError("Claude: Server nicht erreichbar") from None
     if resp.stop_reason in ("refusal", "max_tokens"):
-        log.warning(f"Claude API: Antwort abgebrochen ({resp.stop_reason})")
-        return None
+        raise RuntimeError(f"Claude: Antwort abgebrochen ({resp.stop_reason})")
     raw = next((b.text for b in resp.content if b.type == "text"), "")
-    fields = _parse_fields(raw)
-    if fields:
-        log.info(f"  Benennung: Claude API ({model_id})")
+    fields = _require_fields(raw, "Claude")
+    log.info(f"  Benennung: Claude API ({model_id})")
     return fields
 
 
-def _via_ollama(text: str, model: str) -> dict | None:
-    """Felder per lokalem Ollama-Modell bestimmen (kein Internet noetig)."""
-    payload = {"model": model, "prompt": _build_prompt(text), "stream": False, "format": "json"}
-    data = _http_json("http://localhost:11434/api/generate", payload, {}, 120, "Ollama")
-    fields = _parse_fields(data.get("response", ""))
-    if fields:
-        log.info(f"  Benennung: Ollama ({model})")
+def _via_ollama(text: str, model: str, url: str = "", api_key: str = "") -> dict:
+    """Felder per Ollama bestimmen – lokal oder auf einem Server im Netz.
+    Der API-Key ist optional (z. B. Ollama hinter einem Reverse-Proxy)."""
+    endpoint = f"{normalize_ollama_url(url)}/api/generate"
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    payload = {
+        "model": model,
+        "prompt": _build_prompt(text),
+        "stream": False,
+        "format": _FIELDS_SCHEMA,          # Structured Output (Ollama >= 0.5)
+        "options": {"temperature": 0},
+        "keep_alive": "10m",               # Modell fuer Stapel-Scans im Speicher halten
+    }
+    try:
+        data = _http_json(endpoint, payload, headers, _LOCAL_TIMEOUT, "Ollama")
+    except RuntimeError as e:
+        if "HTTP 400" not in str(e):
+            raise
+        payload["format"] = "json"         # aeltere Ollama-Versionen: nur JSON-Modus
+        data = _http_json(endpoint, payload, headers, _LOCAL_TIMEOUT, "Ollama")
+    fields = _require_fields(data.get("response", ""), "Ollama")
+    log.info(f"  Benennung: Ollama ({model})")
     return fields
 
 

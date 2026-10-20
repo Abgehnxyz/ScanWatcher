@@ -18,7 +18,7 @@ from pathlib import Path
 import keyring
 
 
-CONFIG_VERSION = 3
+CONFIG_VERSION = 4
 
 DEFAULT_CONFIG = {
     "config_version": CONFIG_VERSION,
@@ -29,6 +29,8 @@ DEFAULT_CONFIG = {
     "notifications": True,
     "log_level": "INFO",
     "ollama_model": "llama3.2",
+    "ollama_url": "http://localhost:11434",
+    "custom_base_url": "",
     "telemetry_enabled": False,
     "name_template": "{DATUM}_{ABSENDER}_{BETREFF}",
     "date_format": "YYYY-MM-DD",
@@ -67,6 +69,9 @@ _KEY_ACCOUNTS = {
     "gemini":  "gemini_api_key",
     "mistral": "mistral_api_key",
     "groq":    "groq_api_key",
+    # Optional: geschuetzter Ollama-Server bzw. eigener OpenAI-kompatibler Endpunkt
+    "ollama":  "ollama_api_key",
+    "custom":  "custom_api_key",
 }
 KEY_MODELS = tuple(_KEY_ACCOUNTS)
 
