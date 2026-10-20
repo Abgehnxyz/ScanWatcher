@@ -14,7 +14,6 @@ import platform
 import threading
 import urllib.request
 import uuid
-from pathlib import Path
 
 from . import config
 
@@ -22,6 +21,8 @@ log = logging.getLogger("scan_watcher.telemetry")
 
 _ENDPOINT = "https://ops.abgehn.xyz/api/scanwatcher/event"
 _TIMEOUT  = 10
+
+_enabled: bool | None = None   # None = noch nicht gesetzt -> aus config lesen
 
 
 def _get_install_id() -> str:
@@ -61,9 +62,21 @@ def _win_build() -> str:
         return ""
 
 
-def track_install(version: str) -> None:
-    cfg = config.load()
-    if not cfg.get("telemetry_enabled", False):
+def configure(enabled: bool) -> None:
+    """Einwilligung setzen – beim Start und nach jedem Speichern der Einstellungen."""
+    global _enabled
+    _enabled = bool(enabled)
+
+
+def _is_enabled() -> bool:
+    if _enabled is None:
+        configure(config.load().get("telemetry_enabled", False))
+    return bool(_enabled)
+
+
+def track_install(version: str, cfg: dict) -> None:
+    """Einmalig pro Installation senden (nicht bei jedem Start)."""
+    if not _is_enabled() or cfg.get("install_tracked"):
         return
     _send({
         "install_id": _get_install_id(),
@@ -71,11 +84,12 @@ def track_install(version: str) -> None:
         "version":    version,
         "win_build":  _win_build(),
     })
+    cfg["install_tracked"] = True
+    config.save(cfg)
 
 
 def track_rename(model_used: str, success: bool) -> None:
-    cfg = config.load()
-    if not cfg.get("telemetry_enabled", False):
+    if not _is_enabled():
         return
     _send({
         "install_id": _get_install_id(),
@@ -86,8 +100,7 @@ def track_rename(model_used: str, success: bool) -> None:
 
 
 def track_heartbeat(version: str, files_total: int) -> None:
-    cfg = config.load()
-    if not cfg.get("telemetry_enabled", False):
+    if not _is_enabled():
         return
     _send({
         "install_id":  _get_install_id(),
